@@ -115,78 +115,103 @@ def init_db():
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-def send_verification_email(email, token, username):
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+def send_verification_email(to_email, token):
+    from_email = st.secrets["EMAIL_USER"]
+    password = st.secrets["EMAIL_PASSWORD"]
+    
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = 'Conferma il tuo account - Pokemon Card Marketplace'
+    msg['From'] = f'Pokemon Marketplace <{from_email}>'
+    msg['To'] = to_email
+    
+    verification_link = f"https://pokemonpy.streamlit.app/?verify={token}"
+    
+    # Plain text
+    text = f"""
+Ciao!
+
+Grazie per esserti registrato a Pokemon Card Marketplace.
+
+Per completare la registrazione, clicca sul link qui sotto:
+
+{verification_link}
+
+Se non hai richiesto questa registrazione, ignora questa email.
+
+Il link scade tra 24 ore.
+
+---
+Pokemon Card Marketplace
+Il tuo marketplace di carte Pokemon
+"""
+    
+    # HTML
+    html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0;">Pokemon Card Marketplace</h1>
+    </div>
+    
+    <div style="background: #f9f9f9; padding: 30px; border: 1px solid #ddd; border-top: none; border-radius: 0 0 10px 10px;">
+        <h2 style="color: #667eea; margin-top: 0;">Benvenuto!</h2>
+        
+        <p>Grazie per esserti registrato su Pokemon Card Marketplace.</p>
+        
+        <p>Per completare la registrazione e iniziare a comprare e vendere carte Pokemon, clicca sul pulsante qui sotto:</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{verification_link}" 
+               style="background: #667eea; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                Conferma il tuo account
+            </a>
+        </div>
+        
+        <p style="color: #666; font-size: 14px;">Se il pulsante non funziona, copia e incolla questo link nel tuo browser:</p>
+        <p style="background: #fff; padding: 10px; border: 1px solid #ddd; border-radius: 5px; word-wrap: break-word; font-size: 12px;">
+            {verification_link}
+        </p>
+        
+        <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+        
+        <p style="color: #999; font-size: 12px;">
+            Se non hai richiesto questa registrazione, ignora questa email.<br>
+            Il link di verifica scadr&agrave; tra 24 ore.
+        </p>
+        
+        <p style="color: #999; font-size: 12px; margin-top: 20px;">
+            &copy; 2026 Pokemon Card Marketplace. Tutti i diritti riservati.
+        </p>
+    </div>
+</body>
+</html>
+"""
+    
+    part1 = MIMEText(text, 'plain', 'utf-8')
+    part2 = MIMEText(html, 'html', 'utf-8')
+    
+    msg.attach(part1)
+    msg.attach(part2)
+    
     try:
-        # ✅ CORRETTO: Link al sito vero, non localhost
-        verification_link = f"https://pokemonpy.streamlit.app/?verify={token}"
-        
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = "⚡ Verifica il tuo account Pokemon Marketplace"
-        msg['From'] = EMAIL_CONFIG['email']
-        msg['To'] = email
-        
-        html = f"""
-        <html>
-            <body style="font-family: Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px;">
-                <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; padding: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-                    <div style="text-align: center;">
-                        <h1 style="color: #FF0000; font-size: 2.5rem; margin-bottom: 10px;">⚡ Pokemon Marketplace</h1>
-                        <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" width="150" style="margin: 20px 0;">
-                    </div>
-                    
-                    <h2 style="color: #3B4CCA; margin-top: 30px;">Ciao {username}! 👋</h2>
-                    
-                    <p style="font-size: 1.1rem; color: #333; line-height: 1.6;">
-                        Benvenuto nel marketplace Pokemon più grande d'Italia!
-                    </p>
-                    
-                    <p style="color: #666; line-height: 1.6;">
-                        Per completare la registrazione e iniziare a comprare e vendere carte Pokemon, 
-                        clicca sul pulsante qui sotto per verificare il tuo account:
-                    </p>
-                    
-                    <div style="text-align: center; margin: 40px 0;">
-                        <a href="{verification_link}" 
-                           style="background: linear-gradient(135deg, #FF0000, #CC0000); 
-                                  color: white; 
-                                  padding: 15px 40px; 
-                                  text-decoration: none; 
-                                  border-radius: 25px; 
-                                  font-weight: bold; 
-                                  font-size: 1.2rem;
-                                  display: inline-block;
-                                  box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-                            ✅ VERIFICA IL MIO ACCOUNT
-                        </a>
-                    </div>
-                    
-                    <p style="color: #999; font-size: 0.9rem; margin-top: 30px;">
-                        Se non hai richiesto questa registrazione, ignora questa email.
-                    </p>
-                    
-                    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-                    
-                    <p style="text-align: center; color: #999; font-size: 0.9rem;">
-                        © 2024 Pokemon Marketplace - Made with ❤️ in Italy
-                    </p>
-                </div>
-            </body>
-        </html>
-        """
-        
-        part = MIMEText(html, 'html')
-        msg.attach(part)
-        
-        server = smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'])
+        server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
-        server.login(EMAIL_CONFIG['email'], EMAIL_CONFIG['password'])
-        server.send_message(msg)
+        server.login(from_email, password)
+        server.sendmail(from_email, to_email, msg.as_string())
         server.quit()
-        
-        return True, "Email inviata!"
+        return True
     except Exception as e:
-        print(f"Errore email: {e}")
-        return False, f"Errore: {str(e)}"
+        st.error(f"Errore invio email: {e}")
+        return False
 
 def register_user(email, username, password, nome, cognome, indirizzo, citta, cap, provincia, telefono):
     conn = get_connection()
