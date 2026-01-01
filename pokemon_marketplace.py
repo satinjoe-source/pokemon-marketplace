@@ -6,278 +6,290 @@ from datetime import datetime as dt
 from sqlalchemy import create_engine, text
 from datetime import datetime
 
-# ==================== CONFIGURAZIONE APP ====================
+# ==================== CONFIG ====================
 st.set_page_config(
-    page_title="PokeMarket Nova ✨",
-    page_icon="✨",
+    page_title="Pokemon Portal ⚡",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# ==================== CSS ULTRA MODERNO ====================
+# ==================== CSS GIOVANI GEN Z ====================
 def load_css():
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Space+Grotesk:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&family=Press+Start+2P&display=swap');
 
-    /* Variabili tema Pokemon */
+    /* PALETTE CYBER GEN Z */
     :root {
-        --bg-primary: #0a0e27;
-        --bg-secondary: #1a1f3a;
-        --card-bg: rgba(26, 31, 58, 0.8);
-        --accent-yellow: #ffcb05;
-        --accent-blue: #3b4cca;
-        --accent-red: #d40000;
-        --text-primary: #ffffff;
-        --text-secondary: #94a3b8;
-        --border: rgba(255, 203, 5, 0.3);
-        --glow: rgba(255, 203, 5, 0.4);
+        --cyber-green: #00FF41;
+        --cyber-pink: #FF006E;
+        --cyber-purple: #8338EC;
+        --cyber-blue: #3A86FF;
+        --cyber-yellow: #FFBE0B;
+        --dark-bg: #0d1117;
+        --dark-card: #161b22;
+        --light-bg: #ffffff;
+        --light-card: #f6f8fa;
+        --text-dark: #c9d1d9;
+        --text-light: #24292f;
     }
 
+    /* TEMA SCURO (default) */
+    :root {
+        --bg: var(--dark-bg);
+        --card: var(--dark-card);
+        --text: var(--text-dark);
+    }
+
+    /* TEMA CHIARO LEGGIBILE */
     @media (prefers-color-scheme: light) {
         :root {
-            --bg-primary: #f0f4f8;
-            --bg-secondary: #ffffff;
-            --card-bg: rgba(255, 255, 255, 0.95);
-            --text-primary: #0a0e27;
-            --text-secondary: #64748b;
-            --border: rgba(59, 76, 202, 0.3);
+            --bg: #f0f4ff;
+            --card: var(--light-card);
+            --text: var(--text-light);
+            --cyber-green: #00cc33;
+            --cyber-pink: #e6005c;
+            --cyber-purple: #7029d4;
+            --cyber-blue: #0066ff;
+            --cyber-yellow: #ff9900;
         }
     }
 
-    /* Animazioni */
-    @keyframes float {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
-    }
-    @keyframes glow {
-        0%, 100% { box-shadow: 0 0 20px rgba(255, 203, 5, 0.3); }
-        50% { box-shadow: 0 0 40px rgba(255, 203, 5, 0.6); }
-    }
-    @keyframes slideIn {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
+    /* ANIMAZIONI */
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes neon { 0%, 100% { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; } 50% { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; } }
 
-    /* Background animato */
+    /* BACKGROUND CON PATTERN POKEMON */
     .stApp {
-        background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
-        background-attachment: fixed;
-        color: var(--text-primary);
-        font-family: 'Space Grotesk', sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Poppins', sans-serif;
+        position: relative;
     }
     .stApp::before {
         content: '';
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: 
-            radial-gradient(circle at 20% 50%, rgba(255, 203, 5, 0.1) 0%, transparent 50%),
-            radial-gradient(circle at 80% 80%, rgba(212, 0, 0, 0.1) 0%, transparent 50%),
-            radial-gradient(circle at 40% 20%, rgba(59, 76, 202, 0.1) 0%, transparent 50%);
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background-image: 
+            radial-gradient(circle at 20% 30%, rgba(0, 255, 65, 0.08) 0%, transparent 50%),
+            radial-gradient(circle at 80% 70%, rgba(255, 0, 110, 0.08) 0%, transparent 50%),
+            radial-gradient(circle at 50% 50%, rgba(131, 56, 236, 0.05) 0%, transparent 70%);
         pointer-events: none;
         z-index: 0;
     }
 
-    /* Titoli con effetto neon */
+    /* POKEMON DECORATIVI FISSI */
+    .pokemon-deco {
+        position: fixed;
+        pointer-events: none;
+        z-index: 1;
+        opacity: 0.3;
+        animation: float 4s ease-in-out infinite;
+    }
+    .poke-1 { top: 10%; left: 5%; width: 80px; }
+    .poke-2 { top: 60%; right: 5%; width: 100px; animation-delay: 1s; }
+    .poke-3 { bottom: 10%; left: 10%; width: 70px; animation-delay: 2s; }
+
+    /* TITOLI NEON */
     h1, h2, h3 {
-        font-family: 'Orbitron', sans-serif !important;
-        background: linear-gradient(90deg, var(--accent-yellow), var(--accent-red));
+        font-family: 'Poppins', sans-serif !important;
+        font-weight: 800 !important;
+        background: linear-gradient(135deg, var(--cyber-pink), var(--cyber-purple), var(--cyber-blue));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 0 30px rgba(255, 203, 5, 0.5);
-        animation: glow 3s ease-in-out infinite;
+        animation: neon 3s ease-in-out infinite;
+        letter-spacing: 1px;
     }
 
-    /* Navbar glassmorphism */
-    .nav-container {
-        background: rgba(10, 14, 39, 0.7);
+    /* TOP BAR CON HOME/LOGOUT */
+    .top-bar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: rgba(13, 17, 23, 0.95);
         backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 2px solid var(--border);
-        border-radius: 25px;
-        padding: 1.5rem 2.5rem;
-        margin: 1rem auto 3rem;
-        max-width: 95%;
-        box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3), 0 0 30px var(--glow);
-        animation: slideIn 0.6s ease-out;
+        padding: 0.8rem 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 1000;
+        border-bottom: 2px solid var(--cyber-pink);
+        box-shadow: 0 4px 20px rgba(255, 0, 110, 0.3);
     }
-    .nav-title {
-        font-family: 'Orbitron', sans-serif;
-        font-size: 2.2rem;
-        font-weight: 900;
-        background: linear-gradient(90deg, var(--accent-yellow), var(--accent-red));
+    .top-bar-title {
+        font-family: 'Press Start 2P', cursive;
+        font-size: 1.2rem;
+        background: linear-gradient(90deg, var(--cyber-yellow), var(--cyber-pink));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        letter-spacing: 2px;
-        text-transform: uppercase;
+    }
+    .main-content {
+        margin-top: 80px;
+        position: relative;
+        z-index: 2;
     }
 
-    /* Card con effetto 3D */
-    .product-card {
-        background: var(--card-bg);
+    /* NAVBAR */
+    .nav-container {
+        background: rgba(22, 27, 34, 0.9);
         backdrop-filter: blur(15px);
-        border: 2px solid var(--border);
+        border: 3px solid transparent;
+        border-image: linear-gradient(90deg, var(--cyber-pink), var(--cyber-purple), var(--cyber-blue)) 1;
         border-radius: 20px;
         padding: 1.5rem;
-        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        height: 100%;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        margin: 2rem auto;
+        max-width: 95%;
+        box-shadow: 0 10px 40px rgba(255, 0, 110, 0.2);
+        animation: slideIn 0.6s ease-out;
+    }
+
+    /* CARD 3D */
+    .product-card {
+        background: var(--card);
+        border: 3px solid transparent;
+        border-image: linear-gradient(135deg, var(--cyber-pink), var(--cyber-blue)) 1;
+        border-radius: 15px;
+        padding: 1.2rem;
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        animation: slideIn 0.5s ease-out;
         position: relative;
         overflow: hidden;
-        animation: slideIn 0.5s ease-out;
     }
     .product-card::before {
         content: '';
         position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255, 203, 5, 0.1), transparent);
-        transition: left 0.5s;
+        top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: linear-gradient(45deg, transparent, rgba(255, 0, 110, 0.1), transparent);
+        transform: rotate(45deg);
+        transition: all 0.5s;
     }
     .product-card:hover::before {
         left: 100%;
     }
     .product-card:hover {
-        transform: translateY(-12px) scale(1.02);
-        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4), 0 0 40px var(--glow);
-        border-color: var(--accent-yellow);
+        transform: translateY(-10px) scale(1.03);
+        box-shadow: 0 20px 50px rgba(255, 0, 110, 0.4);
+        border-image: linear-gradient(135deg, var(--cyber-yellow), var(--cyber-pink)) 1;
     }
     .product-card img {
+        border-radius: 10px;
         transition: transform 0.4s;
-        filter: drop-shadow(0 0 10px rgba(255, 203, 5, 0.3));
+        filter: drop-shadow(0 0 15px rgba(131, 56, 236, 0.4));
     }
     .product-card:hover img {
-        transform: scale(1.1) rotate(5deg);
+        transform: scale(1.1) rotate(-5deg);
     }
 
-    /* Prezzo con effetto brillante */
+    /* PRICE TAG ENERGETICO */
     .price-tag {
-        font-size: 1.8rem;
+        font-size: 2rem;
         font-weight: 900;
-        background: linear-gradient(135deg, var(--accent-yellow), var(--accent-red));
+        background: linear-gradient(135deg, var(--cyber-yellow), var(--cyber-pink));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 0 15px rgba(255, 203, 5, 0.6);
-        margin: 0.75rem 0;
-        animation: glow 2s ease-in-out infinite;
+        text-shadow: 0 0 20px rgba(255, 190, 11, 0.6);
+        margin: 1rem 0;
+        animation: pulse 2s ease-in-out infinite;
     }
 
-    /* Header pagina */
-    .page-header {
-        text-align: center;
-        margin: 2rem 0 3rem;
-        padding: 2rem;
-        background: rgba(26, 31, 58, 0.5);
-        backdrop-filter: blur(10px);
-        border-radius: 20px;
-        border: 2px solid var(--border);
-        animation: slideIn 0.6s ease-out;
-    }
-    .page-header h1 {
-        margin: 0;
-        font-size: 3.5rem;
-        letter-spacing: 2px;
-    }
-    .page-header p {
-        color: var(--text-secondary);
-        font-size: 1.3rem;
-        margin-top: 1rem;
-    }
-    .page-header img {
-        animation: float 3s ease-in-out infinite;
-        filter: drop-shadow(0 10px 20px rgba(255, 203, 5, 0.4));
-    }
-
-    /* Badge rarità */
+    /* BADGE RARITÀ VIVACI */
     .rarity-badge {
         display: inline-block;
-        padding: 0.4rem 1rem;
-        border-radius: 15px;
-        font-size: 0.85rem;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.9rem;
         font-weight: 700;
         margin: 0.5rem 0;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 1.5px;
+        box-shadow: 0 0 20px currentColor;
     }
-    .rarity-holo {
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        color: white;
-        box-shadow: 0 0 15px rgba(102, 126, 234, 0.5);
-    }
-    .rarity-ultra {
-        background: linear-gradient(135deg, #f093fb, #f5576c);
-        color: white;
-        box-shadow: 0 0 15px rgba(240, 147, 251, 0.5);
-    }
-    .rarity-secret {
-        background: linear-gradient(135deg, #ffd700, #ff8c00);
-        color: white;
-        box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
-    }
-    .rarity-rara {
-        background: linear-gradient(135deg, #89f7fe, #66a6ff);
-        color: white;
-        box-shadow: 0 0 15px rgba(137, 247, 254, 0.5);
-    }
+    .rarity-holo { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+    .rarity-ultra { background: linear-gradient(135deg, var(--cyber-pink), var(--cyber-purple)); color: white; }
+    .rarity-secret { background: linear-gradient(135deg, var(--cyber-yellow), #ff6b00); color: black; }
+    .rarity-rara { background: linear-gradient(135deg, var(--cyber-blue), var(--cyber-green)); color: white; }
 
-    /* Buttons */
+    /* HEADER PAGINA */
+    .page-header {
+        text-align: center;
+        padding: 2rem;
+        background: rgba(22, 27, 34, 0.8);
+        backdrop-filter: blur(10px);
+        border: 3px solid transparent;
+        border-image: linear-gradient(90deg, var(--cyber-pink), var(--cyber-blue)) 1;
+        border-radius: 20px;
+        margin: 2rem auto;
+        animation: slideIn 0.6s ease-out;
+    }
+    .page-header h1 { font-size: 3rem; margin: 0; }
+    .page-header p { color: var(--text); font-size: 1.2rem; margin-top: 1rem; opacity: 0.8; }
+    .page-header img { animation: float 3s ease-in-out infinite; }
+
+    /* BUTTONS ENERGETICI */
     .stButton > button {
-        background: linear-gradient(135deg, var(--accent-yellow), var(--accent-red)) !important;
-        color: var(--bg-primary) !important;
+        background: linear-gradient(135deg, var(--cyber-pink), var(--cyber-purple)) !important;
+        color: white !important;
         border: none !important;
         border-radius: 12px !important;
         font-weight: 700 !important;
-        padding: 0.75rem 1.5rem !important;
-        transition: all 0.3s !important;
-        box-shadow: 0 5px 15px rgba(255, 203, 5, 0.3) !important;
+        padding: 0.8rem 1.5rem !important;
         text-transform: uppercase;
         letter-spacing: 1px;
+        transition: all 0.3s !important;
+        box-shadow: 0 5px 20px rgba(255, 0, 110, 0.4) !important;
     }
     .stButton > button:hover {
         transform: scale(1.05) !important;
-        box-shadow: 0 10px 30px rgba(255, 203, 5, 0.5) !important;
+        box-shadow: 0 10px 40px rgba(255, 0, 110, 0.6) !important;
     }
     .stButton > button:disabled {
         opacity: 0.5 !important;
         cursor: not-allowed !important;
     }
 
-    /* Inputs */
-    .stTextInput input, .stNumberInput input, .stSelectbox select {
-        background: rgba(26, 31, 58, 0.8) !important;
-        border: 2px solid var(--border) !important;
-        border-radius: 12px !important;
-        color: var(--text-primary) !important;
-        padding: 0.75rem !important;
-        transition: all 0.3s !important;
+    /* INPUTS MODERNI */
+    .stTextInput input, .stNumberInput input, .stSelectbox select, .stTextArea textarea {
+        background: var(--card) !important;
+        border: 2px solid var(--cyber-purple) !important;
+        border-radius: 10px !important;
+        color: var(--text) !important;
+        padding: 0.8rem !important;
+        font-family: 'Poppins', sans-serif !important;
     }
-    .stTextInput input:focus, .stNumberInput input:focus {
-        border-color: var(--accent-yellow) !important;
-        box-shadow: 0 0 20px var(--glow) !important;
+    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {
+        border-color: var(--cyber-pink) !important;
+        box-shadow: 0 0 20px rgba(255, 0, 110, 0.3) !important;
     }
 
-    /* Nasconde elementi Streamlit */
+    /* FILE UPLOADER CON CAMERA */
+    .stFileUploader {
+        background: var(--card);
+        border: 2px dashed var(--cyber-blue);
+        border-radius: 15px;
+        padding: 1.5rem;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+        .top-bar-title { font-size: 0.8rem; }
+        .page-header h1 { font-size: 2rem; }
+        .product-card { padding: 1rem; }
+        .price-tag { font-size: 1.5rem; }
+        .pokemon-deco { display: none; }
+    }
+
+    /* NASCONDI ELEMENTI STREAMLIT */
     [data-testid="stHeader"], footer, header, .viewerBadge_container__r5tak { 
         visibility: hidden !important; 
         height: 0 !important;
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-        .nav-title {
-            font-size: 1.5rem;
-        }
-        .page-header h1 {
-            font-size: 2rem;
-        }
-        .product-card {
-            padding: 1rem;
-        }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -302,12 +314,19 @@ def get_conn():
 def to_dict_list(result):
     return [dict(row._mapping) for row in result.fetchall()]
 
-def serializable(v):
-    if isinstance(v, (datetime, dt)):
-        return v.isoformat()
-    elif isinstance(v, bytes):
-        return base64.b64encode(v).decode()
-    return v
+def get_image_b64(img_data):
+    """Fix immagini - gestisce bytes, memoryview, ecc."""
+    if not img_data:
+        return None
+    try:
+        if isinstance(img_data, memoryview):
+            img_data = bytes(img_data)
+        if isinstance(img_data, bytes):
+            return base64.b64encode(img_data).decode('utf-8')
+        return None
+    except Exception as e:
+        st.error(f"Errore immagine: {e}")
+        return None
 
 def safe_date(d):
     try:
@@ -339,6 +358,8 @@ def init_db():
             password TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )'''))
+        
+        # AGGIUNTO CAMPO DESCRIZIONE
         conn.execute(text('''
         CREATE TABLE IF NOT EXISTS carte (
             id SERIAL PRIMARY KEY,
@@ -346,6 +367,7 @@ def init_db():
             nome TEXT NOT NULL,
             rarita TEXT,
             prezzo REAL NOT NULL,
+            descrizione TEXT,
             immagine BYTEA,
             sold INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -366,7 +388,7 @@ def init_db():
 
 init_db()
 
-# ==================== STATO ====================
+# ==================== STATE ====================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user = None
@@ -374,39 +396,67 @@ if "logged_in" not in st.session_state:
     st.session_state.carrello = []
     st.session_state.processing = False
 
-# ==================== NAVBAR ====================
-def render_nav():
-    col_left, col_center, col_right = st.columns([1, 2, 1])
+# ==================== POKEMON DECORATIVI ====================
+st.markdown("""
+<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" class="pokemon-deco poke-1">
+<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/6.png" class="pokemon-deco poke-2">
+<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/150.png" class="pokemon-deco poke-3">
+""", unsafe_allow_html=True)
+
+# ==================== TOP BAR CON HOME/LOGOUT ====================
+def render_topbar():
+    col1, col2, col3 = st.columns([1, 2, 1])
     
-    with col_center:
-        st.markdown('<div class="nav-container">', unsafe_allow_html=True)
-        st.markdown('<div class="nav-title">⚡ POKE<span style="color:#D40000">MARKET</span> NOVA</div>', unsafe_allow_html=True)
-        
+    with col1:
+        if st.button("🏠 HOME", key="top_home", use_container_width=True):
+            st.session_state.menu = "Market" if st.session_state.logged_in else "Login"
+            st.rerun()
+    
+    with col2:
+        st.markdown('<div class="top-bar-title">⚡ POKEMON PORTAL</div>', unsafe_allow_html=True)
+    
+    with col3:
         if st.session_state.logged_in:
-            nav_cols = st.columns(4)
-            if nav_cols[0].button("🏪 Market", key="nav_mkt", use_container_width=True):
-                st.session_state.menu = "Market"
-                st.rerun()
-            if nav_cols[1].button("💰 Vendi", key="nav_vendi", use_container_width=True):
-                st.session_state.menu = "Vendi"
-                st.rerun()
-            cart_count = len(st.session_state.carrello)
-            if nav_cols[2].button(f"🛒 Carrello ({cart_count})", key="nav_cart", use_container_width=True):
-                st.session_state.menu = "Carrello"
-                st.rerun()
-            if nav_cols[3].button("👤 Profilo", key="nav_prof", use_container_width=True):
-                st.session_state.menu = "Profilo"
-                st.rerun()
-        else:
-            nav_cols = st.columns(2)
-            if nav_cols[0].button("🔑 Login", key="nav_login", use_container_width=True):
+            if st.button("🚪 LOGOUT", key="top_logout", use_container_width=True):
+                st.session_state.logged_in = False
+                st.session_state.user = None
+                st.session_state.carrello = []
                 st.session_state.menu = "Login"
                 st.rerun()
-            if nav_cols[1].button("📝 Registrati", key="nav_reg", use_container_width=True):
-                st.session_state.menu = "Registrazione"
-                st.rerun()
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+
+render_topbar()
+
+st.markdown('<div class="main-content">', unsafe_allow_html=True)
+
+# ==================== NAVBAR ====================
+def render_nav():
+    st.markdown('<div class="nav-container">', unsafe_allow_html=True)
+    
+    if st.session_state.logged_in:
+        nav_cols = st.columns(4)
+        if nav_cols[0].button("🏪 Marketplace", key="nav_mkt", use_container_width=True):
+            st.session_state.menu = "Market"
+            st.rerun()
+        if nav_cols[1].button("💎 Vendi", key="nav_vendi", use_container_width=True):
+            st.session_state.menu = "Vendi"
+            st.rerun()
+        cart_count = len(st.session_state.carrello)
+        if nav_cols[2].button(f"🛒 Carrello ({cart_count})", key="nav_cart", use_container_width=True):
+            st.session_state.menu = "Carrello"
+            st.rerun()
+        if nav_cols[3].button("👤 Profilo", key="nav_prof", use_container_width=True):
+            st.session_state.menu = "Profilo"
+            st.rerun()
+    else:
+        nav_cols = st.columns(2)
+        if nav_cols[0].button("🔑 Login", key="nav_login", use_container_width=True):
+            st.session_state.menu = "Login"
+            st.rerun()
+        if nav_cols[1].button("📝 Registrati", key="nav_reg", use_container_width=True):
+            st.session_state.menu = "Registrazione"
+            st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 render_nav()
 
@@ -417,8 +467,8 @@ if not st.session_state.logged_in:
         st.markdown("""
         <div class="page-header">
             <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/133.png" width="120">
-            <h1>✨ Unisciti alla Lega</h1>
-            <p>Diventa un Trainer leggendario</p>
+            <h1>✨ Diventa un Trainer</h1>
+            <p>Unisciti alla community!</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -428,11 +478,7 @@ if not st.session_state.logged_in:
             pw = st.text_input("🔒 Password", type="password", placeholder="Min 6 caratteri")
             pw2 = st.text_input("🔒 Conferma Password", type="password")
             
-            submitted = st.form_submit_button(
-                "🚀 REGISTRATI ORA",
-                use_container_width=True,
-                disabled=st.session_state.processing
-            )
+            submitted = st.form_submit_button("🚀 REGISTRATI", use_container_width=True, disabled=st.session_state.processing)
             
             if submitted:
                 st.session_state.processing = True
@@ -440,10 +486,10 @@ if not st.session_state.logged_in:
                     st.error("❌ Compila tutti i campi")
                     st.session_state.processing = False
                 elif len(pw) < 6:
-                    st.error("❌ Password troppo corta (min 6)")
+                    st.error("❌ Password troppo corta")
                     st.session_state.processing = False
                 elif pw != pw2:
-                    st.error("❌ Password non coincidono")
+                    st.error("❌ Password diverse")
                     st.session_state.processing = False
                 else:
                     try:
@@ -456,16 +502,13 @@ if not st.session_state.logged_in:
                             conn.commit()
                             conn.close()
                             st.session_state.processing = False
-                            st.success("✅ Registrato! Ora accedi.")
+                            st.success("✅ Account creato!")
                             time.sleep(1.5)
                             st.session_state.menu = "Login"
                             st.rerun()
-                    except Exception as e:
+                    except:
                         st.session_state.processing = False
-                        if "unique" in str(e).lower():
-                            st.error("❌ Email o username già in uso")
-                        else:
-                            st.error(f"❌ Errore: {e}")
+                        st.error("❌ Email/username già in uso")
 
     # --- LOGIN ---
     else:
@@ -473,7 +516,7 @@ if not st.session_state.logged_in:
         <div class="page-header">
             <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" width="140">
             <h1>⚡ Bentornato Trainer</h1>
-            <p>Accedi e inizia la tua avventura</p>
+            <p>Accedi al Pokemon Portal</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -481,15 +524,11 @@ if not st.session_state.logged_in:
             uid = st.text_input("📧 Email o Username")
             pwd = st.text_input("🔒 Password", type="password")
             
-            submitted = st.form_submit_button(
-                "🔓 ACCEDI",
-                use_container_width=True,
-                disabled=st.session_state.processing
-            )
+            submitted = st.form_submit_button("🔓 ACCEDI", use_container_width=True, disabled=st.session_state.processing)
             
             if submitted:
                 st.session_state.processing = True
-                with st.spinner("Verifica credenziali..."):
+                with st.spinner("Verifica..."):
                     conn = get_conn()
                     row = conn.execute(text("""
                         SELECT * FROM users WHERE (email = :u OR username = :u) AND password = :p
@@ -497,9 +536,9 @@ if not st.session_state.logged_in:
                     conn.close()
                     
                     if row:
-                        st.session_state.logged_in = True
                         user = dict(row._mapping)
                         user['created_at'] = safe_date(user['created_at'])
+                        st.session_state.logged_in = True
                         st.session_state.user = user
                         st.session_state.menu = "Market"
                         st.session_state.processing = False
@@ -510,22 +549,22 @@ if not st.session_state.logged_in:
                         st.session_state.processing = False
                         st.error("❌ Credenziali errate")
 
-# ——————————————————— LOGGATO ———————————————————
+# ==================== LOGGATO ====================
 else:
     # --- MARKET ---
     if st.session_state.menu == "Market":
         st.markdown("""
         <div class="page-header">
-            <h1>🏪 Marketplace Globale</h1>
-            <p>Scopri le carte più rare del mondo</p>
+            <h1>🏪 Marketplace</h1>
+            <p>Trova le carte più rare</p>
         </div>
         """, unsafe_allow_html=True)
 
         c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
-        search = c1.text_input("🔍 Cerca carta", "")
-        rarita_filter = c2.selectbox("⭐ Rarità", ["Tutte", "Holo", "Ultra Rara", "Secret", "Rara"])
+        search = c1.text_input("🔍 Cerca", "")
+        rarita_filter = c2.selectbox("⭐", ["Tutte", "Holo", "Ultra Rara", "Secret", "Rara"])
         max_price = c3.number_input("💰 Max €", 1, 100000, 5000)
-        if c4.button("🔍 Cerca", use_container_width=True):
+        if c4.button("Cerca", use_container_width=True):
             pass
 
         query = "SELECT c.*, u.username AS seller FROM carte c JOIN users u ON c.user_id = u.id WHERE c.sold = 0 AND c.prezzo <= :max"
@@ -534,51 +573,52 @@ else:
         if search:
             query += " AND LOWER(c.nome) LIKE :search"
             params["search"] = f"%{search.lower()}%"
-        
         if rarita_filter != "Tutte":
             query += " AND c.rarita = :rarita"
             params["rarita"] = rarita_filter
-            
         query += " ORDER BY c.created_at DESC"
 
-        with st.spinner("Caricamento carte..."):
-            conn = get_conn()
-            cards = to_dict_list(conn.execute(text(query), params))
-            conn.close()
+        conn = get_conn()
+        cards = to_dict_list(conn.execute(text(query), params))
+        conn.close()
 
         if not cards:
-            st.info("🔍 Nessuna carta trovata. Prova con filtri diversi!")
+            st.info("🔍 Nessuna carta trovata")
         else:
-            st.write(f"**{len(cards)} carte trovate**")
+            st.write(f"**{len(cards)} carte**")
             
             cols = st.columns(4)
             for i, c in enumerate(cards):
                 with cols[i % 4]:
-                    img = serializable(c['immagine']) if c['immagine'] else None
                     st.markdown('<div class="product-card">', unsafe_allow_html=True)
                     
-                    if img:
-                        st.image(f"data:image/png;base64,{img}", use_container_width=True)
+                    img_b64 = get_image_b64(c.get('immagine'))
+                    if img_b64:
+                        st.image(f"data:image/png;base64,{img_b64}", use_container_width=True)
                     else:
-                        st.image("https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/0.png", use_container_width=True)
+                        st.image("https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/0.png", use_container_width=True)
                     
                     st.markdown(f"### {c['nome']}")
                     
-                    rarity_class = get_rarity_class(c['rarita'])
-                    st.markdown(f"<span class='rarity-badge {rarity_class}'>{c['rarita']}</span>", unsafe_allow_html=True)
+                    rarity_class = get_rarity_class(c.get('rarita', 'Rara'))
+                    st.markdown(f"<span class='rarity-badge {rarity_class}'>{c.get('rarita', 'N/D')}</span>", unsafe_allow_html=True)
                     
-                    st.markdown(f"<div style='color: var(--text-secondary); margin: 0.5rem 0;'>Venditore: <strong>@{c['seller']}</strong></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='margin: 0.5rem 0; opacity: 0.8;'>@{c.get('seller', 'N/D')}</div>", unsafe_allow_html=True)
+                    
+                    if c.get('descrizione'):
+                        with st.expander("📝 Descrizione"):
+                            st.write(c['descrizione'])
                     
                     st.markdown(f"<div class='price-tag'>€{c['prezzo']:.2f}</div>", unsafe_allow_html=True)
                     
-                    if st.button("🛒 Aggiungi al carrello", key=f"add_{c['id']}", use_container_width=True):
+                    if st.button("🛒 Aggiungi", key=f"add_{c['id']}", use_container_width=True):
                         st.session_state.carrello.append({
                             "id": c["id"],
                             "nome": c["nome"],
                             "prezzo": c["prezzo"],
                             "seller_id": c["user_id"]
                         })
-                        st.toast("✅ Carta aggiunta!", icon="🎉")
+                        st.toast("✅ Aggiunto!", icon="🎉")
                         time.sleep(0.5)
                         st.rerun()
                     
@@ -589,7 +629,7 @@ else:
         st.markdown("""
         <div class="page-header">
             <h1>💎 Vendi le tue Carte</h1>
-            <p>Condividi i tuoi tesori con il mondo</p>
+            <p>Condividi con la community</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -597,56 +637,56 @@ else:
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                img = st.file_uploader("🖼️ Foto Carta*", type=["png", "jpg", "jpeg"])
+                # CAMERA MOBILE FIX
+                img = st.file_uploader(
+                    "📸 Foto Carta*",
+                    type=["png", "jpg", "jpeg"],
+                    help="Su smartphone: tocca per scattare foto"
+                )
                 if img:
-                    st.image(img, caption="Anteprima", use_container_width=True)
+                    st.image(img, use_container_width=True)
             
             with col2:
                 nome = st.text_input("🎴 Nome Carta*", placeholder="Pikachu VMAX")
                 rarita = st.selectbox("⭐ Rarità*", ["Holo", "Ultra Rara", "Secret", "Rara"])
                 prezzo = st.number_input("💰 Prezzo €*", min_value=0.5, step=0.5, value=10.0)
+                descrizione = st.text_area("📝 Descrizione / Difetti", placeholder="Es: Carta in condizioni NM, piccola piega angolo...")
                 
                 st.markdown("""
-                <div style='background: rgba(255, 203, 5, 0.1); padding: 1rem; border-radius: 10px; margin-top: 1rem;'>
-                    <strong>💡 Suggerimenti:</strong><br>
-                    • Usa foto nitide e ben illuminate<br>
+                <div style='background: rgba(131, 56, 236, 0.15); padding: 1rem; border-radius: 10px; margin-top: 1rem; border-left: 3px solid var(--cyber-purple);'>
+                    <strong>💡 Consigli:</strong><br>
+                    • Scatta foto nitide e ben illuminate<br>
                     • Controlla i prezzi di mercato<br>
-                    • Descrivi eventuali difetti
+                    • Descrivi accuratamente le condizioni
                 </div>
                 """, unsafe_allow_html=True)
             
-            submitted = st.form_submit_button(
-                "🚀 PUBBLICA CARTA",
-                use_container_width=True,
-                disabled=st.session_state.processing
-            )
+            submitted = st.form_submit_button("🚀 PUBBLICA", use_container_width=True, disabled=st.session_state.processing)
             
             if submitted:
                 st.session_state.processing = True
                 if not img or not nome:
-                    st.error("❌ Foto e nome sono obbligatori!")
-                    st.session_state.processing = False
-                elif prezzo < 0.5:
-                    st.error("❌ Prezzo minimo €0.50")
+                    st.error("❌ Foto e nome obbligatori")
                     st.session_state.processing = False
                 else:
                     try:
-                        with st.spinner("Pubblicazione in corso..."):
+                        with st.spinner("Pubblicazione..."):
                             conn = get_conn()
                             conn.execute(text("""
-                                INSERT INTO carte (user_id, nome, rarita, prezzo, immagine, created_at)
-                                VALUES (:u, :n, :r, :p, :img, CURRENT_TIMESTAMP)
+                                INSERT INTO carte (user_id, nome, rarita, prezzo, descrizione, immagine, created_at)
+                                VALUES (:u, :n, :r, :p, :d, :img, CURRENT_TIMESTAMP)
                             """), {
                                 "u": st.session_state.user["id"],
                                 "n": nome,
                                 "r": rarita,
                                 "p": prezzo,
+                                "d": descrizione,
                                 "img": img.read()
                             })
                             conn.commit()
                             conn.close()
                             st.session_state.processing = False
-                            st.success("🎉 Carta pubblicata con successo!")
+                            st.success("🎉 Carta pubblicata!")
                             time.sleep(1.5)
                             st.rerun()
                     except Exception as e:
@@ -657,16 +697,16 @@ else:
     elif st.session_state.menu == "Carrello":
         st.markdown("""
         <div class="page-header">
-            <h1>🛒 Il tuo Carrello</h1>
+            <h1>🛒 Carrello</h1>
             <p>Completa il tuo ordine</p>
         </div>
         """, unsafe_allow_html=True)
         
         if not st.session_state.carrello:
             st.markdown("""
-            <div style='text-align: center; padding: 4rem; background: rgba(26, 31, 58, 0.5); border-radius: 20px;'>
-                <h2 style='color: var(--text-secondary);'>🛒 Carrello vuoto</h2>
-                <p style='color: var(--text-secondary);'>Vai al marketplace e trova le tue carte preferite!</p>
+            <div style='text-align: center; padding: 4rem; background: rgba(22, 27, 34, 0.8); border-radius: 20px; border: 2px dashed var(--cyber-blue);'>
+                <h2 style='opacity: 0.6;'>🛒 Carrello vuoto</h2>
+                <p style='opacity: 0.6;'>Vai al marketplace!</p>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -687,79 +727,59 @@ else:
             st.divider()
             st.markdown(f"<h2 style='text-align: right;'>Totale: <span class='price-tag'>€{totale:.2f}</span></h2>", unsafe_allow_html=True)
             
-            st.markdown("### 💳 Metodo di Pagamento")
-            metodo = st.radio("Scegli metodo", ["🎯 Simulazione", "💳 Stripe", "💙 PayPal"], horizontal=True)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if metodo == "💳 Stripe":
-                    st.link_button("💳 Paga con Stripe", "https://buy.stripe.com/test", use_container_width=True, type="primary")
-            with col2:
-                if metodo == "💙 PayPal":
-                    st.link_button("💙 Paga con PayPal", "https://paypal.me/test", use_container_width=True)
-            
-            if metodo == "🎯 Simulazione":
-                if st.button("✅ CONFERMA ORDINE", use_container_width=True, type="primary", disabled=st.session_state.processing):
-                    st.session_state.processing = True
-                    with st.spinner("Elaborazione ordine..."):
-                        time.sleep(1.5)
-                        st.balloons()
-                        st.success("🎉 Ordine confermato! Grazie per l'acquisto!")
-                        st.session_state.carrello.clear()
-                        st.session_state.processing = False
-                        time.sleep(2)
-                        st.rerun()
+            st.markdown("### 💳 Checkout")
+            if st.button("✅ CONFERMA ORDINE", use_container_width=True, type="primary", disabled=st.session_state.processing):
+                st.session_state.processing = True
+                with st.spinner("Elaborazione..."):
+                    time.sleep(1.5)
+                    st.balloons()
+                    st.success("🎉 Ordine confermato!")
+                    st.session_state.carrello.clear()
+                    st.session_state.processing = False
+                    time.sleep(2)
+                    st.rerun()
 
     # --- PROFILO ---
     elif st.session_state.menu == "Profilo":
         user = st.session_state.user
-        created = safe_date(user.get("created_at"))
         
         st.markdown(f"""
         <div class="page-header">
-            <h1>👤 Profilo Trainer</h1>
-            <p>@{user['username']}</p>
+            <h1>👤 @{user['username']}</h1>
+            <p>Il tuo profilo Trainer</p>
         </div>
         """, unsafe_allow_html=True)
         
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"""
-            ### 📊 Informazioni
-            - 📧 **Email**: {user.get('email', 'N/D')}
-            - 🕐 **Iscritto il**: {created}
-            - 🎴 **Carte in vendita**: {len(to_dict_list(get_conn().execute(text("SELECT * FROM carte WHERE user_id = :id AND sold = 0"), {"id": user["id"]})))}
-            """)
-        
-        with col2:
-            if st.button("🚪 Logout", use_container_width=True, type="secondary"):
-                st.session_state.logged_in = False
-                st.session_state.user = None
-                st.session_state.carrello = []
-                st.rerun()
+        st.markdown(f"""
+        ### 📊 Info
+        - 📧 **Email**: {user.get('email', 'N/D')}
+        - 🕐 **Iscritto**: {safe_date(user.get('created_at'))}
+        """)
         
         st.divider()
-        st.markdown("### 🎴 Le Tue Carte in Vendita")
+        st.markdown("### 🎴 Tue Carte")
         
         conn = get_conn()
-        my_cards = to_dict_list(conn.execute(text("SELECT * FROM carte WHERE user_id = :id AND sold = 0"), {"id": user["id"]}))
+        my_cards = to_dict_list(conn.execute(text("SELECT * FROM carte WHERE user_id = :id AND sold = 0 ORDER BY created_at DESC"), {"id": user["id"]}))
         conn.close()
         
         if not my_cards:
-            st.info("📷 Nessuna carta in vendita. Vai su 'Vendi' per pubblicarne una!")
+            st.info("📷 Nessuna carta. Vai su 'Vendi'!")
         else:
             cols = st.columns(4)
             for i, c in enumerate(my_cards):
                 with cols[i % 4]:
-                    img = serializable(c['immagine']) if c['immagine'] else None
                     st.markdown('<div class="product-card">', unsafe_allow_html=True)
                     
-                    if img:
-                        st.image(f"data:image/png;base64,{img}", use_container_width=True)
+                    img_b64 = get_image_b64(c.get('immagine'))
+                    if img_b64:
+                        st.image(f"data:image/png;base64,{img_b64}", use_container_width=True)
                     
                     st.markdown(f"**{c['nome']}**")
-                    rarity_class = get_rarity_class(c['rarita'])
-                    st.markdown(f"<span class='rarity-badge {rarity_class}'>{c['rarita']}</span>", unsafe_allow_html=True)
+                    rarity_class = get_rarity_class(c.get('rarita', 'Rara'))
+                    st.markdown(f"<span class='rarity-badge {rarity_class}'>{c.get('rarita', 'N/D')}</span>", unsafe_allow_html=True)
                     st.markdown(f"<div class='price-tag'>€{c['prezzo']:.2f}</div>", unsafe_allow_html=True)
                     
                     st.markdown('</div>', unsafe_allow_html=True)
+
+st.markdown('</div>', unsafe_allow_html=True)
