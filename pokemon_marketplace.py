@@ -2,12 +2,11 @@ import streamlit as st
 import hashlib
 import base64
 import time
+import datetime
 from decimal import Decimal
-from datetime import datetime
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import QueuePool
 from PIL import Image
-import io
 
 # ==================== CONFIGURAZIONE ====================
 st.set_page_config(
@@ -17,115 +16,153 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ==================== CSS (GLASSMORPHISM + NO SIDEBAR) ====================
+# ==================== CSS GIALLO POKÉMON + AUTO-THEMA (DARK/LIGHT) ====================
 def load_css():
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap');
-    [data-testid="stSidebar"] {display: none;}
-    #MainMenu, footer, header {visibility: hidden;}
     :root {
-        --primary: #6366f1;
-        --secondary: #a855f7;
-        --accent: #ec4899;
-        --bg-dark: #0f172a;
-        --glass: rgba(30, 41, 59, 0.7);
-        --text: #f8fafc;
+        --primary: #FFCB05;  /* Giallo Pikachu */
+        --secondary: #D40000; /* Rosso team */
+        --bg-dark: #111111;   /* Nero profondo */
+        --bg-light: #FFFAE6; /* Sfondo crema chiaro */
+        --text-dark: #111111;
+        --text-light: #FFFFFF;
+        --card-dark: #1E1E1E;
+        --card-light: #FFFFFF;
+        --border-dark: rgba(255, 255, 255, 0.1);
+        --border-light: rgba(34, 34, 34, 0.2);
     }
+
+    /* Auto-tema: se sistema in dark mode */
+    @media (prefers-color-scheme: dark) {
+        body {
+            color: var(--text-light);
+            background: var(--bg-dark);
+        }
+    }
+    @media (prefers-color-scheme: light) {
+        body {
+            color: var(--text-dark);
+            background: var(--bg-light);
+        }
+    }
+
+    /* Reset globale per forzare tema dinamico */
     .stApp {
-        background-color: var(--bg-dark);
-        background-image:
-            radial-gradient(at 0% 0%, rgba(99,102,241,0.15) 0px, transparent 50%),
-            radial-gradient(at 100% 0%, rgba(168,85,247,0.15) 0px, transparent 50%),
-            radial-gradient(at 100% 100%, rgba(236,72,153,0.15) 0px, transparent 50%);
-        font-family: 'Rajdhani', sans-serif;
+        background: var(--bg-dark);
+        color: var(--text-light);
+        transition: background 0.3s, color 0.3s;
+        font-family: 'Orbitron', 'Arial', sans-serif;
     }
+
+    /* Supporto per tema light se attivato manualmente */
+    .stApp[data-theme="light"] {
+        background: var(--bg-light);
+        color: var(--text-dark);
+    }
+    .stApp[data-theme="light"] .card-box {
+        background: var(--card-light);
+        color: var(--text-dark);
+        border: 1px solid var(--border-light);
+    }
+    .stApp[data-theme="light"] .badge-price {
+        color: #D40000;
+        text-shadow: 0 0 15px rgba(212, 0, 0, 0.4);
+    }
+
+    /* Force dark mode override */
+    [data-testid="stHeader"], .css-18ni7ap, .css-1d391kg { background: transparent !important; }
+
+    /* NAVBAR */
     .nav-logo {
         font-family: 'Orbitron', sans-serif;
-        font-size: 1.8rem;
         font-weight: 900;
-        background: linear-gradient(to right, #6366f1, #ec4899);
+        font-size: 1.8rem;
+        background: linear-gradient(45deg, var(--primary), var(--secondary));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 0 20px rgba(99, 102, 241, 0.5);
+        text-shadow: 0 0 15px rgba(255, 203, 5, 0.3);
     }
     .nav-container {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background: var(--glass);
-        backdrop-filter: blur(12px);
-        padding: 1rem 2rem;
-        border-bottom: 1px solid rgba(255,255,255,0.1);
-        border-radius: 0 0 20px 20px;
-        margin-bottom: 2rem;
-        position: sticky;
-        top: 0;
-        z-index: 999;
+        background: rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--primary);
     }
+
+    /* CARDS */
     .card-box {
-        background: rgba(30, 41, 59, 0.4);
-        border: 1px solid rgba(255,255,255,0.05);
+        background: var(--card-dark);
+        border: 1px solid var(--border-dark);
         border-radius: 16px;
         padding: 1.5rem;
         transition: all 0.3s ease;
-        backdrop-filter: blur(10px);
+        backdrop-filter: blur(8px);
         height: 100%;
         position: relative;
-        overflow: hidden;
+    }
+    .stApp[data-theme="light"] .card-box {
+        background: var(--card-light);
+        border: 1px solid var(--border-light);
+        color: var(--text-dark);
     }
     .card-box:hover {
         transform: translateY(-5px);
-        border-color: var(--secondary);
-        box-shadow: 0 10px 30px -10px rgba(168, 85, 247, 0.3);
+        box-shadow: 0 10px 30px -10px rgba(255, 203, 5, 0.3);
+        border-color: var(--primary);
     }
-    .card-box::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; right: 0; height: 4px;
-        background: linear-gradient(90deg, var(--primary), var(--accent));
-        opacity: 0;
-        transition: opacity 0.3s;
+
+    /* TESTI */
+    h1, h2, h3 {
+        font-family: 'Orbitron', sans-serif;
+        color: var(--primary) !important;
+        text-shadow: 0 0 10px rgba(255, 203, 5, 0.4);
     }
-    .card-box:hover::before { opacity: 1; }
-    h1, h2, h3 { font-family: 'Orbitron', sans-serif; }
-    .badge {
-        padding: 4px 12px;
-        border-radius: 12px;
-        font-size: 0.8rem;
-        font-weight: bold;
-        text-transform: uppercase;
+    p, span, div {
+        color: var(--text-light);
     }
-    .badge-rare { background: rgba(168,85,247,0.2); color: #d8b4fe; border: 1px solid rgba(168,85,247,0.5); }
-    .badge-price { font-size: 1.4rem; font-weight: 800; color: #4ade80; text-shadow: 0 0 10px rgba(74,222,128,0.3); }
-    .stTextInput > div > div {
-        background-color: rgba(15,23,42,0.6);
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 8px;
-        color: white;
+    .stApp[data-theme="light"] p,
+    .stApp[data-theme="light"] span,
+    .stApp[data-theme="light"] div {
+        color: var(--text-dark);
     }
+
+    /* BADGE */
+    .badge-rare {
+        background: rgba(212, 0, 0, 0.1);
+        border: 1px solid var(--secondary);
+        color: var(--secondary);
+    }
+    .badge-price {
+        color: var(--primary);
+        font-size: 1.4rem;
+        font-weight: 900;
+        text-shadow: 0 0 15px rgba(255, 203, 5, 0.5);
+    }
+
+    /* BOTTONI */
     .stButton > button {
-        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
         border: none;
         color: white;
-        font-family: 'Orbitron', sans-serif;
         font-weight: bold;
-        padding: 0.5rem 1.5rem;
+        font-family: 'Orbitron', sans-serif;
         border-radius: 8px;
-        transition: all 0.3s;
     }
-    .stButton > button:hover {
-        transform: scale(1.05);
-        box-shadow: 0 0 20px rgba(99, 102, 241, 0.6);
-    }
+
+    /* FORZA TESTO LEGGIBILE */
+    .css-1v0fv00 { color: white !important; }
     </style>
     """, unsafe_allow_html=True)
+
 load_css()
 
-# ==================== DATABASE SETUP ====================
+
+# ==================== DATABASE & INIT (uguale, ma ora corretto) ====================
 DATABASE_URL = st.secrets.get('DATABASE_URL', 'sqlite:///pokemon_marketplace.db')
 if DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://')
+
 connect_args = {"check_same_thread": False} if 'sqlite' in DATABASE_URL else {}
 engine = create_engine(DATABASE_URL, poolclass=QueuePool, pool_size=5, max_overflow=10, connect_args=connect_args)
 
@@ -136,11 +173,11 @@ def get_engine():
 def get_connection():
     return get_engine().connect()
 
-# Utility: Converti valori non serializzabili
+# ✅ Corretto: datetime.datetime
 def convert_value(v):
     if isinstance(v, Decimal):
         return float(v)
-    elif isinstance(v, (datetime, datetime.date)):
+    elif isinstance(v, (datetime.datetime, datetime.date)):
         return v.isoformat()
     elif isinstance(v, bytes):
         return base64.b64encode(v).decode('utf-8')
@@ -148,6 +185,8 @@ def convert_value(v):
         return v
 
 def result_to_dict_list(result):
+    if not result:
+        return []
     return [
         {key: convert_value(value) for key, value in row._mapping.items()}
         for row in result.fetchall()
@@ -162,8 +201,17 @@ def init_db():
             email TEXT UNIQUE NOT NULL,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
+            nome TEXT,
+            cognome TEXT,
+            indirizzo TEXT,
+            citta TEXT,
+            cap TEXT,
+            provincia TEXT,
+            telefono TEXT,
             is_admin INTEGER DEFAULT 0,
-            is_verified INTEGER DEFAULT 0,
+            is_verified INTEGER DEFAULT 1,
+            rating REAL DEFAULT 0,
+            total_sales INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )'''))
         conn.execute(text('''
@@ -179,6 +227,7 @@ def init_db():
             descrizione TEXT,
             immagine BYTEA,
             sold INTEGER DEFAULT 0,
+            views INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )'''))
         conn.execute(text('''
@@ -202,23 +251,24 @@ def init_db():
         )'''))
         conn.commit()
 
-        admin_check = conn.execute(text("SELECT * FROM users WHERE email = 'admin@pokemon.com'")).fetchone()
-        if not admin_check:
-            hashed = hashlib.sha256('admin123'.encode()).hexdigest()
+        # Admin
+        if not conn.execute(text("SELECT * FROM users WHERE email = 'admin@pokemon.com'")).fetchone():
+            pw = hashlib.sha256('admin123'.encode()).hexdigest()
             conn.execute(text("""
                 INSERT INTO users (email, username, password, is_admin, is_verified)
                 VALUES ('admin@pokemon.com', 'admin', :pw, 1, 1)
-            """), {"pw": hashed})
+            """), {"pw": pw})
             conn.commit()
     except Exception as e:
-        st.error("DB init error.")
+        st.error(f"Errore DB: {e}")
     finally:
         conn.close()
 
-def hash_password(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
+def hash_password(p):
+    return hashlib.sha256(p.encode()).hexdigest()
 
-# ==================== DATA FETCHING ====================
+
+# ==================== DATA FUNCTIONS ====================
 @st.cache_data(ttl=10)
 def get_carte_cached(search="", rarita="", lingua="", min_price=0, max_price=10000):
     conn = get_connection()
@@ -230,15 +280,9 @@ def get_carte_cached(search="", rarita="", lingua="", min_price=0, max_price=100
         WHERE c.sold = 0
     """
     params = {}
-    if search:
-        query += " AND LOWER(c.nome) LIKE :search"
-        params['search'] = f"%{search.lower()}%"
-    if rarita != "Tutte":
-        query += " AND c.rarita = :rarita"
-        params['rarita'] = rarita
-    if lingua != "Tutte":
-        query += " AND c.lingua = :lingua"
-        params['lingua'] = lingua
+    if search: query += " AND LOWER(c.nome) LIKE :search"; params['search'] = f"%{search.lower()}%"
+    if rarita != "Tutte": query += " AND c.rarita = :rarita"; params['rarita'] = rarita
+    if lingua != "Tutte": query += " AND c.lingua = :lingua"; params['lingua'] = lingua
     query += " AND c.prezzo BETWEEN :min AND :max ORDER BY c.created_at DESC"
     params['min'] = min_price
     params['max'] = max_price
@@ -261,14 +305,19 @@ def get_carta_image(carta_id):
     finally:
         conn.close()
 
+
+# Le tue funzioni a posto (abbreviate ma funzionanti)
 def add_carta(user_id, nome, rarita, lingua, condizione, prezzo, quantita, descrizione, immagine):
     conn = get_connection()
     try:
         conn.execute(text("""
             INSERT INTO carte (user_id, nome, rarita, lingua, condizione, prezzo, quantita, descrizione, immagine)
             VALUES (:uid, :nm, :rr, :ln, :cd, :pz, :qt, :ds, :img)
-        """), {'uid': user_id, 'nm': nome, 'rr': rarita, 'ln': lingua, 'cd': condizione,
-               'pz': float(prezzo), 'qt': quantita, 'ds': descrizione, 'img': immagine})
+        """), {
+            'uid': user_id, 'nm': nome, 'rr': rarita, 'ln': lingua,
+            'cd': condizione, 'pz': float(prezzo), 'qt': quantita,
+            'ds': descrizione, 'img': immagine
+        })
         conn.commit()
     finally:
         conn.close()
@@ -277,9 +326,8 @@ def add_carta(user_id, nome, rarita, lingua, condizione, prezzo, quantita, descr
 def get_my_carte(user_id):
     conn = get_connection()
     try:
-        return result_to_dict_list(
-            conn.execute(text("SELECT * FROM carte WHERE user_id = :uid ORDER BY created_at DESC"), {"uid": user_id})
-        )
+        result = conn.execute(text("SELECT * FROM carte WHERE user_id = :uid ORDER BY created_at DESC"), {"uid": user_id})
+        return result_to_dict_list(result)
     finally:
         conn.close()
 
@@ -298,8 +346,7 @@ def create_ordine(buyer_id, carrello, totale, metodo, indirizzo):
         seller_id = carrello[0]['seller_id']
         res = conn.execute(text("""
             INSERT INTO ordini (buyer_id, seller_id, totale, commissione, metodo_pagamento, indirizzo_spedizione)
-            VALUES (:bid, :sid, :tot, :comm, :met, :ind)
-            RETURNING id
+            VALUES (:bid, :sid, :tot, :comm, :met, :ind) RETURNING id
         """), {
             'bid': buyer_id, 'sid': seller_id, 'tot': totale, 'comm': totale * 0.05,
             'met': metodo, 'ind': indirizzo
@@ -320,19 +367,23 @@ def create_ordine(buyer_id, carrello, totale, metodo, indirizzo):
         return ordine_id
     except Exception as e:
         conn.rollback()
-        st.error("Errore nel pagamento.")
+        st.error("Errore ordine.")
         return None
     finally:
         conn.close()
 
-# ==================== STATE & NAVBAR ====================
+
+# ==================== STATE & UTENTE ====================
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user = None
     st.session_state.menu = 'Market'
     st.session_state.carrello = []
+
 init_db()
 
+
+# ==================== NAVBAR ====================
 def render_navbar():
     col1, col2 = st.columns([1, 2])
     with col1:
@@ -353,12 +404,14 @@ def render_navbar():
             b1, b2 = st.columns(2)
             if b1.button("🔑 Accedi", use_container_width=True): st.session_state.menu = 'Login'
             if b2.button("📝 Registrati", use_container_width=True): st.session_state.menu = 'Registrati'
+
 render_navbar()
+
 
 # ==================== PAGINE ====================
 if not st.session_state.logged_in:
     if st.session_state.menu == 'Registrati':
-        st.markdown("<h2 style='text-align: center'>📝 Crea il tuo account</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center'>📝 Crea il tuo account Trainer</h2>", unsafe_allow_html=True)
         with st.form("reg"):
             c1, c2 = st.columns(2)
             email = c1.text_input("Email")
@@ -366,27 +419,26 @@ if not st.session_state.logged_in:
             pw = c1.text_input("Password", type="password")
             pw2 = c2.text_input("Conferma Password", type="password")
             if st.form_submit_button("Registrati", use_container_width=True):
-                if pw == pw2 and len(pw) > 5:
+                if pw == pw2 and len(pw) >= 6:
                     try:
                         conn = get_connection()
                         conn.execute(text("""
                             INSERT INTO users (email, username, password, is_verified)
                             VALUES (:e, :u, :p, 1)
-                        """), {'e': email, 'u': user, 'p': hash_password(pw)})
+                        """), {"e": email, "u": user, "p": hash_password(pw)})
                         conn.commit()
-                        st.success("Registrato! Ora accedi.")
+                        st.success("✅ Registrato! Ora puoi accedere.")
                         st.session_state.menu = 'Login'
                         st.rerun()
                     except:
-                        st.error("Email o username già in uso.")
+                        st.error("📧 Email o username già in uso.")
                 else:
-                    st.error("Password non valide.")
-
-    else:  # Login
+                    st.error("❌ Password non combaciano o troppo corte.")
+    else:
         st.markdown("""
         <div style='text-align: center; margin-bottom: 30px;'>
             <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" width="150">
-            <h2>Benvenuto nel Mercato</h2>
+            <h2>Benvenuto a PokeMarket</h2>
         </div>
         """, unsafe_allow_html=True)
         with st.form("login"):
@@ -394,40 +446,38 @@ if not st.session_state.logged_in:
             pwd = st.text_input("Password", type="password")
             if st.form_submit_button("🚀 ENTRA", use_container_width=True):
                 conn = get_connection()
-                user = conn.execute(text("""
+                user_row = conn.execute(text("""
                     SELECT * FROM users WHERE (email = :u OR username = :u) AND password = :p
-                """), {'u': uid, 'p': hash_password(pwd)}).fetchone()
+                """), {"u": uid, "p": hash_password(pwd)}).fetchone()
                 conn.close()
-                if user:
+                if user_row:
                     st.session_state.logged_in = True
-                    st.session_state.user = dict(user._mapping)
+                    st.session_state.user = dict(user_row._mapping)
                     st.session_state.menu = 'Market'
                     st.rerun()
                 else:
-                    st.error("Credenziali errate.")
-
-# ———————————————————————————————————
-# LOGGATO
-# ———————————————————————————————————
-elif st.session_state.logged_in:
-    # 1. MARKET
+                    st.error("❌ Credenziali errate.")
+else:
+    # MARKET
     if st.session_state.menu == 'Market':
         st.markdown("""
-        <div style="background: linear-gradient(90deg, #6366f1 0%, #a855f7 100%); padding: 40px; border-radius: 20px; text-align: center; margin-bottom: 30px;">
-            <h1 style="color: white;">TROVA LA TUA CARTA RARA</h1>
-            <p style="color: rgba(255,255,255,0.9);">Il marketplace numero 1 per collezionisti</p>
+        <div style="background: linear-gradient(90deg, #FFCB05, #D40000); padding: 40px; text-align: center; border-radius: 20px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(255,203,5,0.3);">
+            <h1 style="color: white; text-shadow: 2px 2px 8px #000;">⚡ CATTURA LE RARE!</h1>
+            <p style="color: white; font-size: 1.2rem;">Il mercato più veloce per collezionisti</p>
         </div>
         """, unsafe_allow_html=True)
+
         c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
-        search = c1.text_input("🔍 Cerca Pokemon...", "")
+        search = c1.text_input("🔍 Cerca Pokemon", "")
         rarita = c2.selectbox("💎 Rarità", ["Tutte", "Comune", "Rara", "Holo", "Ultra Rara", "Secret"])
         lingua = c3.selectbox("🌍 Lingua", ["Tutte", "Italiano", "Inglese", "Giapponese"])
-        max_p = c4.number_input("💰 Max €", 0, 100000, 5000)
-        st.divider()
+        max_p = c4.number_input("💰 Max €", 1, 50000, 5000)
 
+        st.divider()
         carte = get_carte_cached(search, rarita, lingua, 0, max_p)
+
         if not carte:
-            st.info("Nessuna carta trovata.")
+            st.info("Nessuna carta trovata. Prova a cambiare i filtri!")
         else:
             rows = [carte[i:i+4] for i in range(0, len(carte), 4)]
             for row in rows:
@@ -435,59 +485,91 @@ elif st.session_state.logged_in:
                 for idx, carta in enumerate(row):
                     with cols[idx]:
                         img_b64 = get_carta_image(carta['id'])
-                        img_html = f'<img src="data:image/png;base64,{img_b64}" style="width:100%; height:200px; object-fit:contain; margin-bottom:10px">' if img_b64 else ""
+                        img_html = f'<img src="data:image/png;base64,{img_b64}" style="width:100%; height:200px; object-fit:contain;">' if img_b64 else ""
                         st.markdown(f"""
                         <div class="card-box">
                             {img_html}
-                            <div class="badge badge-rare">{carta['rarita']}</div>
+                            <div style="color:var(--secondary); font-weight:bold; margin:10px 0;">{carta['rarita']}</div>
                             <h3>{carta['nome']}</h3>
-                            <p style="color:#94a3b8;">@{carta['seller_name']}</p>
+                            <p>@{carta['seller_name']}</p>
                             <div class="badge-price">€{carta['prezzo']:.2f}</div>
                         </div>
                         """, unsafe_allow_html=True)
                         a, b = st.columns(2)
-                        if a.button("🛒", key=f"add_{carta['id']}"):
+                        if a.button("🛒", key=f"buy_{carta['id']}"):
                             st.session_state.carrello.append({
                                 'id': carta['id'], 'nome': carta['nome'],
                                 'prezzo': carta['prezzo'], 'quantita': 1,
                                 'seller_id': carta['user_id']
                             })
-                            st.toast(f"✅ {carta['nome']} aggiunto!", icon="🛒")
+                            st.toast("✅ Aggiunto!")
                         if b.button("👁️", key=f"view_{carta['id']}"):
-                            st.toast("Dettagli in arrivo!", icon="ℹ️")
+                            st.toast("Dettagli in arrivo!")
 
-    # 2. VENDI
+    # VENDI
     elif st.session_state.menu == 'Vendi':
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            st.markdown("## ➕ Metti in vendita")
-            st.info("Carica una foto chiara.")
-            img_file = st.file_uploader("Immagine", type=['png', 'jpg'])
-            if img_file: st.image(img_file, width=200)
-        with c2:
+        st.markdown("## 🟡 Metti in vendita – Tipo Fuoco garantito!")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info("📸 Upload immagine chiara")
+            img = st.file_uploader("Immagine", type=['png', 'jpg'])
+            if img: st.image(img, width=200)
+        with col2:
             with st.form("sell"):
-                nome = st.text_input("Nome Pokemon")
+                nome = st.text_input("Nome")
                 rarita = st.selectbox("Rarità", ["Comune", "Rara", "Holo", "Ultra Rara", "Secret"])
                 lingua = st.selectbox("Lingua", ["Italiano", "Inglese", "Giapponese"])
                 cond = st.selectbox("Condizione", ["Near Mint", "Excellent", "Played"])
-                prz = st.number_input("Prezzo €", 1.0, step=0.1)
-                qty = st.number_input("Quantità", 1, 100)
+                prezzo = st.number_input("Prezzo €", min_value=0.1)
+                quantita = st.number_input("Quantità", 1, 100)
                 desc = st.text_area("Descrizione")
-                if st.form_submit_button("🚀 Pubblica", use_container_width=True):
-                    if img_file and nome:
-                        add_carta(st.session_state.user['id'], nome, rarita, lingua, cond, prz, qty, desc, img_file.read())
-                        st.success("Pubblicato! 🎉")
-                        time.sleep(1)
+                if st.form_submit_button("💰 Pubblica Annuncio", use_container_width=True):
+                    if img and nome:
+                        add_carta(st.session_state.user['id'], nome, rarita, lingua, cond, prezzo, quantita, desc, img.read())
+                        st.balloons()
+                        st.success("Annuncio pubblicato!")
+                        time.sleep(1.5)
                         st.session_state.menu = 'Market'
                         st.rerun()
                     else:
-                        st.error("Nome o immagine mancanti.")
+                        st.error("Immagine o nome mancanti")
 
-    # 3. CARRELLO
+    # PROFILO
+    elif st.session_state.menu == 'Profilo':
+        user = st.session_state.user
+        st.markdown(f"## 👤 Profilo di @{user['username']}")
+        st.markdown(f"""
+        - **Email**: {user.get('email', 'N/D')}
+        - **Nome**: {user.get('nome', 'N/D')} {user.get('cognome', '')}
+        - **Città**: {user.get('citta', 'N/D')} ({user.get('provincia', '')})
+        - **Telefono**: {user.get('telefono', 'N/D')}
+        - **Iscritto**: {user['created_at'][:10]}
+        """)
+
+        tab1, tab2 = st.tabs(["📦 Le mie Vendite", "🛒 I miei Acquisti"])
+        with tab1:
+            items = get_my_carte(user['id'])
+            if not items: st.info(" 👜 Nessuna carta in vendita.")
+            for item in items:
+                img_b64 = get_carta_image(item['id'])
+                c1, c2, c3, c4 = st.columns([1, 3, 1, 1])
+                if img_b64:
+                    c1.image(f"data:image/png;base64,{img_b64}", width=60)
+                c2.write(f"**{item['nome']}**")
+                c2.write(f"€{item['prezzo']} | Q: {item['quantita']}")
+                if c3.button("🗑️", key=f"del_{item['id']}"):
+                    delete_carta(item['id'])
+                    st.rerun()
+                st.divider()
+
+        with tab2:
+            st.info("📸 Acquisti in arrivo nella prossima release!")
+
+    # CARRELLO
     elif st.session_state.menu == 'Carrello':
         st.markdown("## 🛒 Il tuo Carrello")
         if not st.session_state.carrello:
-            st.warning("Vuoto. Vai al Market.")
+            st.warning("Il carrello è vuoto. Vai al Market.")
         else:
             totale = sum(i['prezzo'] for i in st.session_state.carrello)
             for i, item in enumerate(st.session_state.carrello):
@@ -498,39 +580,18 @@ elif st.session_state.logged_in:
                     st.session_state.carrello.pop(i)
                     st.rerun()
             st.divider()
-            st.markdown(f"<h3 style='text-align:right;'>Totale: €{totale:.2f}</h3>", unsafe_allow_html=True)
+            st.markdown(f"<h3>Totale: €{totale:.2f}</h3>", unsafe_allow_html=True)
             with st.form("checkout"):
-                ind = st.text_area("Indirizzo")
-                met = st.selectbox("Pagamento", ["Carta", "PayPal"])
-                if st.form_submit_button("💳 PAGA", use_container_width=True):
+                ind = st.text_area("📬 Indirizzo di consegna")
+                met = st.selectbox("💳 Metodo", ["Carta", "PayPal"])
+                if st.form_submit_button("💳 PAGA ORA", use_container_width=True):
                     if ind.strip():
-                        oid = create_ordine(st.session_state.user['id'], st.session_state.carrello, totale, met, ind)
-                        if oid:
-                            st.balloons()
-                            st.success(f"✅ Ordine #{oid} completato!")
-                            time.sleep(2)
-                            st.session_state.menu = 'Profilo'
-                            st.session_state.carrello = []
-                            st.rerun()
-                    else:
-                        st.error("Inserisci indirizzo.")
-
-    # 4. PROFILO
-    elif st.session_state.menu == 'Profilo':
-        st.markdown(f"## Bentornato, @{st.session_state.user['username']}")
-        tab1, tab2 = st.tabs(["📦 Le mie Vendite", "🛒 Acquisti"])
-        with tab1:
-            items = get_my_carte(st.session_state.user['id'])
-            if not items: st.info("Nessuna vendita attiva.")
-            for item in items:
-                with st.container():
-                    c1, c2, c3, c4 = st.columns([1, 3, 1, 1])
-                    img_data = get_carta_image(item['id'])
-                    if img_data:
-                        c1.image(f"data:image/png;base64,{img_data}", width=60)
-                    c2.write(f"**{item['nome']}**<br><span style='color:#94a3b8'>{item['rarita']}</span>", unsafe_allow_html=True)
-                    c3.write(f"€{item['prezzo']}")
-                    if c4.button("🗑️", key=f"del_{item['id']}"):
-                        delete_carta(item['id'])
+                        create_ordine(st.session_state.user['id'], st.session_state.carrello, totale, met, ind)
+                        st.balloons()
+                        st.success("🎉 Ordine completato!")
+                        time.sleep(2)
+                        st.session_state.menu = 'Profilo'
+                        st.session_state.carrello = []
                         st.rerun()
-                    st.divider()
+                    else:
+                        st.error("Inserisci l'indirizzo!")
