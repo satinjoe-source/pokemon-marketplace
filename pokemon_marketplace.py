@@ -1,110 +1,123 @@
-# pokemon_marketplace.py
+# pokemon_marketplace.py - VERSIONE PULITA E SICURA
 import streamlit as st
-import sqlite3
 import hashlib
 import secrets
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 from PIL import Image
 import io
+import os
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool
+
+# ==================== CONFIGURAZIONE DATABASE ====================
+DATABASE_URL = st.secrets.get('DATABASE_URL', 'sqlite:///pokemon_marketplace.db')
+
+if DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://')
+
+engine = create_engine(DATABASE_URL, poolclass=NullPool)
 
 # ==================== CONFIGURAZIONE EMAIL ====================
 EMAIL_CONFIG = {
     'smtp_server': 'smtp.gmail.com',
     'smtp_port': 587,
-    'email': 'satinjoe@gmail.com',
-    'password': 'qevl usux lodr wmav'  # IMPORTANTE: Usa una App Password di Google, non la password normale
+    'email': st.secrets.get('EMAIL_USER', ''),
+    'password': st.secrets.get('EMAIL_PASSWORD', '')
 }
 
-# ==================== DATABASE ====================
+# ==================== DATABASE FUNCTIONS ====================
+def get_connection():
+    return engine.connect()
+
 def init_db():
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
+    conn = get_connection()
     
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE,
-        username TEXT UNIQUE,
-        password TEXT,
-        nome TEXT,
-        cognome TEXT,
-        indirizzo TEXT,
-        citta TEXT,
-        cap TEXT,
-        provincia TEXT,
-        telefono TEXT,
-        is_admin INTEGER DEFAULT 0,
-        is_verified INTEGER DEFAULT 0,
-        verification_token TEXT,
-        rating REAL DEFAULT 0,
-        total_sales INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
+    try:
+        conn.execute(text('''CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            nome TEXT,
+            cognome TEXT,
+            indirizzo TEXT,
+            citta TEXT,
+            cap TEXT,
+            provincia TEXT,
+            telefono TEXT,
+            is_admin INTEGER DEFAULT 0,
+            is_verified INTEGER DEFAULT 0,
+            verification_token TEXT,
+            rating REAL DEFAULT 0,
+            total_sales INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )'''))
+        
+        conn.execute(text('''CREATE TABLE IF NOT EXISTS carte (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id),
+            nome TEXT NOT NULL,
+            serie TEXT,
+            numero TEXT,
+            rarita TEXT,
+            lingua TEXT,
+            condizione TEXT,
+            prezzo REAL NOT NULL,
+            quantita INTEGER DEFAULT 1,
+            descrizione TEXT,
+            immagine BYTEA,
+            stato TEXT DEFAULT 'disponibile',
+            views INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )'''))
+        
+        conn.execute(text('''CREATE TABLE IF NOT EXISTS ordini (
+            id SERIAL PRIMARY KEY,
+            buyer_id INTEGER REFERENCES users(id),
+            seller_id INTEGER REFERENCES users(id),
+            totale REAL,
+            commissione REAL,
+            stato TEXT DEFAULT 'in attesa',
+            metodo_pagamento TEXT,
+            indirizzo_spedizione TEXT,
+            tracking_number TEXT,
+            note TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )'''))
+        
+        conn.execute(text('''CREATE TABLE IF NOT EXISTS ordini_dettagli (
+            id SERIAL PRIMARY KEY,
+            ordine_id INTEGER REFERENCES ordini(id),
+            carta_id INTEGER REFERENCES carte(id),
+            quantita INTEGER,
+            prezzo REAL
+        )'''))
+        
+        conn.commit()
+        
+        result = conn.execute(text("SELECT * FROM users WHERE email='admin@pokemon.com'"))
+        if not result.fetchone():
+            admin_pass = hash_password('admin123')
+            conn.execute(text("""INSERT INTO users (email, username, password, nome, cognome, is_admin, is_verified) 
+                         VALUES ('admin@pokemon.com', 'admin', :password, 'Admin', 'System', 1, 1)"""),
+                         {'password': admin_pass})
+            conn.commit()
     
-    c.execute('''CREATE TABLE IF NOT EXISTS carte (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        nome TEXT,
-        serie TEXT,
-        numero TEXT,
-        rarita TEXT,
-        lingua TEXT,
-        condizione TEXT,
-        prezzo REAL,
-        quantita INTEGER,
-        descrizione TEXT,
-        immagine BLOB,
-        stato TEXT DEFAULT 'disponibile',
-        views INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-    )''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS ordini (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        buyer_id INTEGER,
-        seller_id INTEGER,
-        totale REAL,
-        commissione REAL,
-        stato TEXT DEFAULT 'in attesa',
-        metodo_pagamento TEXT,
-        indirizzo_spedizione TEXT,
-        tracking_number TEXT,
-        note TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (buyer_id) REFERENCES users(id),
-        FOREIGN KEY (seller_id) REFERENCES users(id)
-    )''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS ordini_dettagli (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ordine_id INTEGER,
-        carta_id INTEGER,
-        quantita INTEGER,
-        prezzo REAL,
-        FOREIGN KEY (ordine_id) REFERENCES ordini(id),
-        FOREIGN KEY (carta_id) REFERENCES carte(id)
-    )''')
-    
-    # Crea admin di default
-    c.execute("SELECT * FROM users WHERE email='admin@pokemon.com'")
-    if not c.fetchone():
-        admin_pass = hash_password('admin123')
-        c.execute("""INSERT INTO users (email, username, password, nome, cognome, is_admin, is_verified) 
-                     VALUES ('admin@pokemon.com', 'admin', ?, 'Admin', 'System', 1, 1)""", (admin_pass,))
-    
-    conn.commit()
-    conn.close()
+    except Exception as e:
+        st.error(f"Errore DB: {e}")
+    finally:
+        conn.close()
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def send_verification_email(email, token, username):
     try:
-        verification_link = f"http://localhost:8501/?verify={token}"
+        verification_link = f"https://pokemonpy.streamlit.app/?verify={token}"
         
         msg = MIMEMultipart('alternative')
         msg['Subject'] = "⚡ Verifica il tuo account Pokemon Marketplace"
@@ -114,23 +127,24 @@ def send_verification_email(email, token, username):
         html = f"""
         <html>
             <body style="font-family: Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px;">
-                <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; padding: 40px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; padding: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
                     <div style="text-align: center;">
-                        <h1 style="color: #FF0000; font-size: 2.5rem;">⚡ Pokemon Marketplace</h1>
-                        <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" width="150">
+                        <h1 style="color: #FF0000; font-size: 2.5rem; margin-bottom: 10px;">⚡ Pokemon Marketplace</h1>
+                        <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" width="150" style="margin: 20px 0;">
                     </div>
                     
-                    <h2 style="color: #3B4CCA;">Ciao {username}! 👋</h2>
+                    <h2 style="color: #3B4CCA; margin-top: 30px;">Ciao {username}! 👋</h2>
                     
-                    <p style="font-size: 1.1rem; color: #333;">
+                    <p style="font-size: 1.1rem; color: #333; line-height: 1.6;">
                         Benvenuto nel marketplace Pokemon più grande d'Italia!
                     </p>
                     
-                    <p style="color: #666;">
-                        Clicca sul pulsante qui sotto per verificare il tuo account e iniziare a comprare e vendere carte Pokemon:
+                    <p style="color: #666; line-height: 1.6;">
+                        Per completare la registrazione e iniziare a comprare e vendere carte Pokemon, 
+                        clicca sul pulsante qui sotto per verificare il tuo account:
                     </p>
                     
-                    <div style="text-align: center; margin: 30px 0;">
+                    <div style="text-align: center; margin: 40px 0;">
                         <a href="{verification_link}" 
                            style="background: linear-gradient(135deg, #FF0000, #CC0000); 
                                   color: white; 
@@ -141,15 +155,15 @@ def send_verification_email(email, token, username):
                                   font-size: 1.2rem;
                                   display: inline-block;
                                   box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-                            ✅ VERIFICA ACCOUNT
+                            ✅ VERIFICA IL MIO ACCOUNT
                         </a>
                     </div>
                     
-                    <p style="color: #999; font-size: 0.9rem;">
+                    <p style="color: #999; font-size: 0.9rem; margin-top: 30px;">
                         Se non hai richiesto questa registrazione, ignora questa email.
                     </p>
                     
-                    <hr style="border: 1px solid #eee; margin: 30px 0;">
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
                     
                     <p style="text-align: center; color: #999; font-size: 0.9rem;">
                         © 2024 Pokemon Marketplace - Made with ❤️ in Italy
@@ -168,20 +182,31 @@ def send_verification_email(email, token, username):
         server.send_message(msg)
         server.quit()
         
-        return True, "Email inviata con successo!"
+        return True, "Email inviata!"
     except Exception as e:
-        print(f"Errore invio email: {e}")
+        print(f"Errore email: {e}")
         return False, f"Errore: {str(e)}"
 
 def register_user(email, username, password, nome, cognome, indirizzo, citta, cap, provincia, telefono):
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
+    conn = get_connection()
     try:
         token = secrets.token_urlsafe(32)
-        c.execute("""INSERT INTO users 
+        conn.execute(text("""INSERT INTO users 
                      (email, username, password, nome, cognome, indirizzo, citta, cap, provincia, telefono, verification_token) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                  (email, username, hash_password(password), nome, cognome, indirizzo, citta, cap, provincia, telefono, token))
+                     VALUES (:email, :username, :password, :nome, :cognome, :indirizzo, :citta, :cap, :provincia, :telefono, :token)"""),
+                  {
+                      'email': email,
+                      'username': username,
+                      'password': hash_password(password),
+                      'nome': nome,
+                      'cognome': cognome,
+                      'indirizzo': indirizzo,
+                      'citta': citta,
+                      'cap': cap,
+                      'provincia': provincia,
+                      'telefono': telefono,
+                      'token': token
+                  })
         conn.commit()
         conn.close()
         
@@ -190,169 +215,185 @@ def register_user(email, username, password, nome, cognome, indirizzo, citta, ca
             return True, "✅ Registrazione completata! Controlla la tua email per verificare l'account."
         else:
             return True, f"⚠️ Account creato ma errore invio email: {message}"
-    except sqlite3.IntegrityError as e:
+    except Exception as e:
         conn.close()
-        if 'email' in str(e):
+        if 'email' in str(e).lower():
             return False, "❌ Email già registrata"
-        elif 'username' in str(e):
+        elif 'username' in str(e).lower():
             return False, "❌ Username già in uso"
-        return False, "❌ Errore nella registrazione"
+        return False, f"❌ Errore: {str(e)}"
 
 def verify_user(token):
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
-    c.execute("UPDATE users SET is_verified=1 WHERE verification_token=?", (token,))
-    affected = c.rowcount
+    conn = get_connection()
+    result = conn.execute(text("UPDATE users SET is_verified=1 WHERE verification_token=:token"),
+                         {'token': token})
+    affected = result.rowcount
     conn.commit()
     conn.close()
     return affected > 0
 
 def login_user(email_or_username, password):
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
-    c.execute("""SELECT * FROM users 
-                 WHERE (email=? OR username=?) AND password=?""", 
-              (email_or_username, email_or_username, hash_password(password)))
-    user = c.fetchone()
+    conn = get_connection()
+    result = conn.execute(text("""SELECT * FROM users 
+                 WHERE (email=:id OR username=:id) AND password=:password"""),
+              {'id': email_or_username, 'password': hash_password(password)})
+    user = result.fetchone()
     conn.close()
     return user
 
-# ==================== CARTE FUNCTIONS ====================
 def add_carta(user_id, nome, serie, numero, rarita, lingua, condizione, prezzo, quantita, descrizione, immagine):
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
-    c.execute("""INSERT INTO carte 
+    conn = get_connection()
+    conn.execute(text("""INSERT INTO carte 
                  (user_id, nome, serie, numero, rarita, lingua, condizione, prezzo, quantita, descrizione, immagine)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-              (user_id, nome, serie, numero, rarita, lingua, condizione, prezzo, quantita, descrizione, immagine))
+                 VALUES (:user_id, :nome, :serie, :numero, :rarita, :lingua, :condizione, :prezzo, :quantita, :descrizione, :immagine)"""),
+              {
+                  'user_id': user_id,
+                  'nome': nome,
+                  'serie': serie,
+                  'numero': numero,
+                  'rarita': rarita,
+                  'lingua': lingua,
+                  'condizione': condizione,
+                  'prezzo': prezzo,
+                  'quantita': quantita,
+                  'descrizione': descrizione,
+                  'immagine': immagine
+              })
     conn.commit()
     conn.close()
 
 def get_my_carte(user_id):
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
-    c.execute("SELECT * FROM carte WHERE user_id=? ORDER BY created_at DESC", (user_id,))
-    carte = c.fetchall()
+    conn = get_connection()
+    result = conn.execute(text("SELECT * FROM carte WHERE user_id=:user_id ORDER BY created_at DESC"),
+                         {'user_id': user_id})
+    carte = result.fetchall()
     conn.close()
     return carte
 
 def get_carte(search="", rarita="", serie="", lingua="", min_price=0, max_price=10000):
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
-    query = "SELECT c.*, u.username, u.rating FROM carte c JOIN users u ON c.user_id = u.id WHERE c.quantita > 0 AND c.stato='disponibile'"
-    params = []
+    conn = get_connection()
+    query = """SELECT c.*, u.username, u.rating FROM carte c 
+               JOIN users u ON c.user_id = u.id 
+               WHERE c.quantita > 0 AND c.stato='disponibile'"""
+    params = {}
     
     if search:
-        query += " AND (c.nome LIKE ? OR c.descrizione LIKE ?)"
-        params.extend([f"%{search}%", f"%{search}%"])
+        query += " AND (c.nome ILIKE :search OR c.descrizione ILIKE :search)"
+        params['search'] = f"%{search}%"
     if rarita:
-        query += " AND c.rarita = ?"
-        params.append(rarita)
+        query += " AND c.rarita = :rarita"
+        params['rarita'] = rarita
     if serie:
-        query += " AND c.serie LIKE ?"
-        params.append(f"%{serie}%")
+        query += " AND c.serie ILIKE :serie"
+        params['serie'] = f"%{serie}%"
     if lingua:
-        query += " AND c.lingua = ?"
-        params.append(lingua)
-    query += " AND c.prezzo BETWEEN ? AND ?"
-    params.extend([min_price, max_price])
+        query += " AND c.lingua = :lingua"
+        params['lingua'] = lingua
     
-    c.execute(query, params)
-    carte = c.fetchall()
+    query += " AND c.prezzo BETWEEN :min_price AND :max_price"
+    params['min_price'] = min_price
+    params['max_price'] = max_price
+    
+    result = conn.execute(text(query), params)
+    carte = result.fetchall()
     conn.close()
     return carte
 
 def delete_carta(carta_id):
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
-    c.execute("DELETE FROM carte WHERE id=?", (carta_id,))
+    conn = get_connection()
+    conn.execute(text("DELETE FROM carte WHERE id=:id"), {'id': carta_id})
     conn.commit()
     conn.close()
 
 def increment_views(carta_id):
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
-    c.execute("UPDATE carte SET views = views + 1 WHERE id=?", (carta_id,))
+    conn = get_connection()
+    conn.execute(text("UPDATE carte SET views = views + 1 WHERE id=:id"), {'id': carta_id})
     conn.commit()
     conn.close()
 
 def create_ordine(buyer_id, seller_id, carrello, totale, metodo_pagamento, indirizzo):
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
+    conn = get_connection()
     
     commissione = totale * 0.05
-    c.execute("""INSERT INTO ordini (buyer_id, seller_id, totale, commissione, metodo_pagamento, indirizzo_spedizione)
-                 VALUES (?, ?, ?, ?, ?, ?)""",
-              (buyer_id, seller_id, totale, commissione, metodo_pagamento, indirizzo))
-    ordine_id = c.lastrowid
+    result = conn.execute(text("""INSERT INTO ordini (buyer_id, seller_id, totale, commissione, metodo_pagamento, indirizzo_spedizione)
+                 VALUES (:buyer_id, :seller_id, :totale, :commissione, :metodo, :indirizzo)
+                 RETURNING id"""),
+              {
+                  'buyer_id': buyer_id,
+                  'seller_id': seller_id,
+                  'totale': totale,
+                  'commissione': commissione,
+                  'metodo': metodo_pagamento,
+                  'indirizzo': indirizzo
+              })
+    ordine_id = result.fetchone()[0]
     
     for item in carrello:
-        c.execute("""INSERT INTO ordini_dettagli (ordine_id, carta_id, quantita, prezzo)
-                     VALUES (?, ?, ?, ?)""",
-                  (ordine_id, item['id'], item['quantita'], item['prezzo']))
-        c.execute("UPDATE carte SET quantita = quantita - ? WHERE id = ?",
-                  (item['quantita'], item['id']))
+        conn.execute(text("""INSERT INTO ordini_dettagli (ordine_id, carta_id, quantita, prezzo)
+                     VALUES (:ordine_id, :carta_id, :quantita, :prezzo)"""),
+                  {
+                      'ordine_id': ordine_id,
+                      'carta_id': item['id'],
+                      'quantita': item['quantita'],
+                      'prezzo': item['prezzo']
+                  })
+        conn.execute(text("UPDATE carte SET quantita = quantita - :qta WHERE id = :id"),
+                  {'qta': item['quantita'], 'id': item['id']})
     
     conn.commit()
     conn.close()
     return ordine_id
 
-# ==================== ADMIN FUNCTIONS ====================
 def get_all_users():
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
-    c.execute("SELECT * FROM users ORDER BY created_at DESC")
-    users = c.fetchall()
+    conn = get_connection()
+    result = conn.execute(text("SELECT * FROM users ORDER BY created_at DESC"))
+    users = result.fetchall()
     conn.close()
     return users
 
 def get_all_carte_admin():
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
-    c.execute("""SELECT c.*, u.username FROM carte c 
+    conn = get_connection()
+    result = conn.execute(text("""SELECT c.*, u.username FROM carte c 
                  JOIN users u ON c.user_id = u.id 
-                 ORDER BY c.created_at DESC""")
-    carte = c.fetchall()
+                 ORDER BY c.created_at DESC"""))
+    carte = result.fetchall()
     conn.close()
     return carte
 
 def get_stats():
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
+    conn = get_connection()
     
-    c.execute("SELECT COUNT(*) FROM users WHERE is_admin=0")
-    total_users = c.fetchone()[0]
+    result = conn.execute(text("SELECT COUNT(*) FROM users WHERE is_admin=0"))
+    total_users = result.fetchone()[0]
     
-    c.execute("SELECT COUNT(*) FROM carte")
-    total_carte = c.fetchone()[0]
+    result = conn.execute(text("SELECT COUNT(*) FROM carte"))
+    total_carte = result.fetchone()[0]
     
-    c.execute("SELECT COUNT(*) FROM ordini")
-    total_ordini = c.fetchone()[0]
+    result = conn.execute(text("SELECT COUNT(*) FROM ordini"))
+    total_ordini = result.fetchone()[0]
     
-    c.execute("SELECT SUM(totale) FROM ordini WHERE stato='completato'")
-    total_revenue = c.fetchone()[0] or 0
+    result = conn.execute(text("SELECT COALESCE(SUM(totale), 0) FROM ordini WHERE stato='completato'"))
+    total_revenue = result.fetchone()[0]
     
-    c.execute("SELECT SUM(commissione) FROM ordini WHERE stato='completato'")
-    total_commission = c.fetchone()[0] or 0
+    result = conn.execute(text("SELECT COALESCE(SUM(commissione), 0) FROM ordini WHERE stato='completato'"))
+    total_commission = result.fetchone()[0]
     
     conn.close()
     return total_users, total_carte, total_ordini, total_revenue, total_commission
 
 def toggle_user_status(user_id, field):
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
+    conn = get_connection()
     if field == 'admin':
-        c.execute("UPDATE users SET is_admin = NOT is_admin WHERE id=?", (user_id,))
+        conn.execute(text("UPDATE users SET is_admin = CASE WHEN is_admin = 1 THEN 0 ELSE 1 END WHERE id=:id"), {'id': user_id})
     elif field == 'verified':
-        c.execute("UPDATE users SET is_verified = NOT is_verified WHERE id=?", (user_id,))
+        conn.execute(text("UPDATE users SET is_verified = CASE WHEN is_verified = 1 THEN 0 ELSE 1 END WHERE id=:id"), {'id': user_id})
     conn.commit()
     conn.close()
 
 def delete_user(user_id):
-    conn = sqlite3.connect('pokemon_marketplace.db')
-    c = conn.cursor()
-    c.execute("DELETE FROM carte WHERE user_id=?", (user_id,))
-    c.execute("DELETE FROM users WHERE id=?", (user_id,))
+    conn = get_connection()
+    conn.execute(text("DELETE FROM carte WHERE user_id=:id"), {'id': user_id})
+    conn.execute(text("DELETE FROM users WHERE id=:id"), {'id': user_id})
     conn.commit()
     conn.close()
 
@@ -381,17 +422,6 @@ def load_css():
     @keyframes pulse {
         0%, 100% { transform: scale(1); }
         50% { transform: scale(1.05); }
-    }
-    
-    .nav-bar {
-        background: linear-gradient(135deg, #FFCB05, #FFA500);
-        padding: 15px;
-        border-radius: 15px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
     }
     
     .card-container {
@@ -543,18 +573,14 @@ def load_css():
         font-weight: 600;
     }
     
-    .login-box {
-        background: white;
-        padding: 40px;
-        border-radius: 20px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        max-width: 500px;
-        margin: 50px auto;
-    }
-    
     [data-testid="stSidebar"] {
         display: none;
     }
+    
+    /* Nascondi elementi Streamlit non necessari */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
     
     </style>
     """, unsafe_allow_html=True)
@@ -585,6 +611,7 @@ query_params = st.query_params
 if 'verify' in query_params:
     if verify_user(query_params['verify']):
         st.success("✅ Email verificata con successo! Ora puoi effettuare il login.")
+        st.balloons()
     else:
         st.error("❌ Token di verifica non valido")
 
@@ -658,8 +685,6 @@ if not st.session_state.logged_in and st.session_state.page == 'marketplace':
     tab1, tab2 = st.tabs(["🔑 ACCEDI", "📝 REGISTRATI"])
     
     with tab1:
-        st.markdown('<div class="login-box">', unsafe_allow_html=True)
-        
         with st.form("login_form", clear_on_submit=True):
             st.markdown("### 🔑 Accedi al tuo account")
             
@@ -680,12 +705,8 @@ if not st.session_state.logged_in and st.session_state.page == 'marketplace':
                         st.error("❌ Verifica prima la tua email!")
                 else:
                     st.error("❌ Credenziali non valide")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
     
     with tab2:
-        st.markdown('<div class="login-box">', unsafe_allow_html=True)
-        
         with st.form("register_form", clear_on_submit=True):
             st.markdown("### 📝 Crea il tuo account")
             
@@ -742,8 +763,6 @@ if not st.session_state.logged_in and st.session_state.page == 'marketplace':
                         st.info("📧 Controlla la tua casella email e clicca sul link di verifica!")
                     else:
                         st.error(message)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
 
 # Resto delle pagine (solo se loggato)
 elif st.session_state.logged_in:
@@ -942,7 +961,9 @@ elif st.session_state.logged_in:
             with col1:
                 metodo = st.selectbox("💳 Pagamento", ["PayPal", "Satispay", "Carta"])
             with col2:
-                indirizzo = st.text_area("📍 Indirizzo")
+                user = st.session_state.user
+                indirizzo_default = f"{user[6]}, {user[7]} {user[8]}" if user[6] else ""
+                indirizzo = st.text_area("📍 Indirizzo", value=indirizzo_default)
             
             if st.button("💳 PAGA ORA", type="primary", use_container_width=True):
                 seller_id = st.session_state.carrello[0]['seller_id']
