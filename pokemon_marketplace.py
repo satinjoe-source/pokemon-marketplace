@@ -1,4 +1,4 @@
-# pokemon_marketplace.py - VERSIONE PULITA E SICURA
+# pokemon_marketplace.py - VERSIONE CORRETTA E COMPLETA
 import streamlit as st
 import hashlib
 import secrets
@@ -117,6 +117,7 @@ def hash_password(password):
 
 def send_verification_email(email, token, username):
     try:
+        # ✅ CORRETTO: Link al sito vero, non localhost
         verification_link = f"https://pokemonpy.streamlit.app/?verify={token}"
         
         msg = MIMEMultipart('alternative')
@@ -577,7 +578,6 @@ def load_css():
         display: none;
     }
     
-    /* Nascondi elementi Streamlit non necessari */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -702,44 +702,67 @@ if not st.session_state.logged_in and st.session_state.page == 'marketplace':
                         st.success(f"✅ Benvenuto @{user[2]}!")
                         st.rerun()
                     else:
-                        st.error("❌ Verifica prima la tua email!")
+                        st.error("❌ Devi verificare la tua email prima di accedere!")
+                        st.info("📧 Controlla la tua casella email oppure usa il form qui sotto per ricevere un nuovo link.")
                 else:
                     st.error("❌ Credenziali non valide")
+        
+        # ✅ NUOVO: Form per reinviare email di verifica
+        st.divider()
+        st.markdown("#### 📧 Non hai ricevuto l'email di verifica?")
+        
+        with st.form("resend_form"):
+            resend_email = st.text_input("Inserisci la tua email", key="resend_email_input")
+            resend_submitted = st.form_submit_button("📨 Reinvia Email di Verifica")
+            
+            if resend_submitted and resend_email:
+                conn = get_connection()
+                result = conn.execute(text("SELECT * FROM users WHERE email=:email AND is_verified=0"),
+                                     {'email': resend_email})
+                user_to_verify = result.fetchone()
+                conn.close()
+                
+                if user_to_verify:
+                    send_verification_email(user_to_verify[1], user_to_verify[13], user_to_verify[2])
+                    st.success("✅ Email di verifica reinviata! Controlla la tua casella.")
+                else:
+                    st.error("❌ Email non trovata o account già verificato")
     
     with tab2:
-        with st.form("register_form", clear_on_submit=True):
+        # ✅ CORRETTO: clear_on_submit=False per non cancellare il form in caso di errore
+        with st.form("register_form", clear_on_submit=False):
             st.markdown("### 📝 Crea il tuo account")
             
-            reg_email = st.text_input("📧 Email*", placeholder="mario.rossi@email.com")
-            reg_username = st.text_input("👤 Username*", placeholder="mario_rossi")
+            reg_email = st.text_input("📧 Email*", placeholder="mario.rossi@email.com", key="reg_email")
+            reg_username = st.text_input("👤 Username*", placeholder="mario_rossi", key="reg_username")
             
             col1, col2 = st.columns(2)
             with col1:
-                reg_pass = st.text_input("🔒 Password*", type="password", placeholder="Min 6 caratteri")
+                reg_pass = st.text_input("🔒 Password*", type="password", placeholder="Min 6 caratteri", key="reg_pass")
             with col2:
-                reg_pass_confirm = st.text_input("🔒 Conferma Password*", type="password")
+                reg_pass_confirm = st.text_input("🔒 Conferma Password*", type="password", key="reg_pass_confirm")
             
             st.divider()
             
             col1, col2 = st.columns(2)
             with col1:
-                reg_nome = st.text_input("Nome*")
+                reg_nome = st.text_input("Nome*", key="reg_nome")
             with col2:
-                reg_cognome = st.text_input("Cognome*")
+                reg_cognome = st.text_input("Cognome*", key="reg_cognome")
             
-            reg_indirizzo = st.text_input("📍 Indirizzo", placeholder="Via Roma 123")
+            reg_indirizzo = st.text_input("📍 Indirizzo", placeholder="Via Roma 123", key="reg_indirizzo")
             
             col1, col2, col3 = st.columns(3)
             with col1:
-                reg_citta = st.text_input("Città", placeholder="Milano")
+                reg_citta = st.text_input("Città", placeholder="Milano", key="reg_citta")
             with col2:
-                reg_cap = st.text_input("CAP", placeholder="20100")
+                reg_cap = st.text_input("CAP", placeholder="20100", key="reg_cap")
             with col3:
-                reg_provincia = st.text_input("Provincia", placeholder="MI")
+                reg_provincia = st.text_input("Provincia", placeholder="MI", key="reg_provincia")
             
-            reg_telefono = st.text_input("📱 Telefono", placeholder="+39 333 1234567")
+            reg_telefono = st.text_input("📱 Telefono", placeholder="+39 333 1234567", key="reg_telefono")
             
-            reg_privacy = st.checkbox("✅ Accetto termini e condizioni*")
+            reg_privacy = st.checkbox("✅ Accetto termini e condizioni*", key="reg_privacy")
             
             submitted = st.form_submit_button("✅ REGISTRATI ORA", use_container_width=True, type="primary")
             
@@ -761,6 +784,12 @@ if not st.session_state.logged_in and st.session_state.page == 'marketplace':
                         st.success(message)
                         st.balloons()
                         st.info("📧 Controlla la tua casella email e clicca sul link di verifica!")
+                        
+                        # ✅ NUOVO: Reset form solo dopo successo
+                        for key in list(st.session_state.keys()):
+                            if key.startswith('reg_'):
+                                del st.session_state[key]
+                        st.rerun()
                     else:
                         st.error(message)
 
