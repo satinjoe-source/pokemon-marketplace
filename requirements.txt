@@ -1,0 +1,4 @@
+streamlit
+Pillow
+sqlalchemy
+psycopg2-binary
