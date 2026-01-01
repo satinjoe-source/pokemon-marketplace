@@ -1,27 +1,195 @@
-# pokemon_marketplace.py - VERSIONE CORRETTA E COMPLETA
+# pokemon_marketplace.py - VERSIONE OTTIMIZZATA
 import streamlit as st
 import hashlib
 import secrets
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from PIL import Image
 import io
 import os
 from sqlalchemy import create_engine, text
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import QueuePool
+import time
 
-# ==================== CONFIGURAZIONE DATABASE ====================
+# ==================== CONFIGURAZIONE ====================
+st.set_page_config(
+    page_title="Pokemon Card Marketplace",
+    page_icon="🎴",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# ==================== CSS OTTIMIZZATO + DARK MODE ====================
+def load_css():
+    st.markdown("""
+    <style>
+    /* VARIABILI DARK/LIGHT */
+    :root {
+        --bg-primary: #0f0f23;
+        --bg-secondary: #1a1a2e;
+        --bg-card: #16213e;
+        --text-primary: #e4e4e7;
+        --text-secondary: #a1a1aa;
+        --accent-primary: #7c3aed;
+        --accent-secondary: #c026d3;
+        --border-color: #27272a;
+        --success: #22c55e;
+        --warning: #f59e0b;
+        --error: #ef4444;
+    }
+    
+    @media (prefers-color-scheme: light) {
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f4f4f5;
+            --bg-card: #ffffff;
+            --text-primary: #18181b;
+            --text-secondary: #71717a;
+            --border-color: #e4e4e7;
+        }
+    }
+    
+    /* RESET STREAMLIT */
+    .main {
+        background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+        padding: 1rem;
+    }
+    
+    .stApp {
+        background: var(--bg-primary);
+    }
+    
+    /* CARDS */
+    .card-container {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 1rem;
+        transition: all 0.2s;
+        height: 100%;
+    }
+    
+    .card-container:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
+        border-color: var(--accent-primary);
+    }
+    
+    /* BADGES */
+    .rarity-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        color: white;
+        margin: 0.5rem 0;
+    }
+    
+    .sold-badge {
+        background: var(--error) !important;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-weight: bold;
+        display: inline-block;
+        margin: 0.5rem 0;
+    }
+    
+    .price-tag {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--accent-primary);
+        margin: 0.5rem 0;
+    }
+    
+    /* HEADER */
+    .pokemon-title {
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 3rem;
+        font-weight: 900;
+        text-align: center;
+        margin: 1rem 0;
+        text-shadow: 0 0 30px rgba(124, 58, 237, 0.5);
+    }
+    
+    /* COMMENTI */
+    .comment-box {
+        background: var(--bg-card);
+        border-left: 3px solid var(--accent-primary);
+        padding: 1rem;
+        margin: 0.5rem 0;
+        border-radius: 8px;
+    }
+    
+    .comment-author {
+        font-weight: 600;
+        color: var(--accent-primary);
+        margin-bottom: 0.5rem;
+    }
+    
+    /* LOADING */
+    .stSpinner > div {
+        border-color: var(--accent-primary) !important;
+    }
+    
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+        .pokemon-title {
+            font-size: 2rem;
+        }
+        .card-container {
+            padding: 0.75rem;
+        }
+        .price-tag {
+            font-size: 1.25rem;
+        }
+    }
+    
+    /* BUTTONS */
+    .stButton > button {
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    
+    .stButton > button:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
+    }
+    
+    .stButton > button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+load_css()
+
+# ==================== DATABASE ====================
 DATABASE_URL = st.secrets.get('DATABASE_URL', 'sqlite:///pokemon_marketplace.db')
-
 if DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://')
 
-engine = create_engine(DATABASE_URL, poolclass=NullPool)
+# Connection pooling per performance
+engine = create_engine(
+    DATABASE_URL,
+    poolclass=QueuePool,
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True
+)
 
-# ==================== CONFIGURAZIONE EMAIL ====================
 EMAIL_CONFIG = {
     'smtp_server': 'smtp.gmail.com',
     'smtp_port': 587,
@@ -29,14 +197,18 @@ EMAIL_CONFIG = {
     'password': st.secrets.get('EMAIL_PASSWORD', '')
 }
 
-# ==================== DATABASE FUNCTIONS ====================
+# ==================== DATABASE FUNCTIONS CON CACHING ====================
+@st.cache_resource
+def get_engine():
+    return engine
+
 def get_connection():
-    return engine.connect()
+    return get_engine().connect()
 
 def init_db():
     conn = get_connection()
-    
     try:
+        # Users
         conn.execute(text('''CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             email TEXT UNIQUE NOT NULL,
@@ -57,12 +229,11 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )'''))
         
+        # Carte - RIMOSSI numero e serie, AGGIUNTO sold
         conn.execute(text('''CREATE TABLE IF NOT EXISTS carte (
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id),
             nome TEXT NOT NULL,
-            serie TEXT,
-            numero TEXT,
             rarita TEXT,
             lingua TEXT,
             condizione TEXT,
@@ -70,11 +241,22 @@ def init_db():
             quantita INTEGER DEFAULT 1,
             descrizione TEXT,
             immagine BYTEA,
-            stato TEXT DEFAULT 'disponibile',
+            sold INTEGER DEFAULT 0,
             views INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )'''))
         
+        # Commenti - NUOVA TABELLA
+        conn.execute(text('''CREATE TABLE IF NOT EXISTS comments (
+            id SERIAL PRIMARY KEY,
+            carta_id INTEGER REFERENCES carte(id) ON DELETE CASCADE,
+            user_id INTEGER REFERENCES users(id),
+            comment TEXT NOT NULL,
+            rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )'''))
+        
+        # Ordini
         conn.execute(text('''CREATE TABLE IF NOT EXISTS ordini (
             id SERIAL PRIMARY KEY,
             buyer_id INTEGER REFERENCES users(id),
@@ -83,6 +265,7 @@ def init_db():
             commissione REAL,
             stato TEXT DEFAULT 'in attesa',
             metodo_pagamento TEXT,
+            stripe_payment_intent TEXT,
             indirizzo_spedizione TEXT,
             tracking_number TEXT,
             note TEXT,
@@ -99,6 +282,7 @@ def init_db():
         
         conn.commit()
         
+        # Admin di default
         result = conn.execute(text("SELECT * FROM users WHERE email='admin@pokemon.com'"))
         if not result.fetchone():
             admin_pass = hash_password('admin123')
@@ -115,11 +299,7 @@ def init_db():
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
-
+# ==================== EMAIL ====================
 def send_verification_email(to_email, token, username):
     from_email = st.secrets["EMAIL_USER"]
     password = st.secrets["EMAIL_PASSWORD"]
@@ -131,26 +311,20 @@ def send_verification_email(to_email, token, username):
     
     verification_link = f"https://pokemonpy.streamlit.app/?verify={token}"
     
-    # Plain text
     text = f"""
 Ciao {username}!
 
 Grazie per esserti registrato a Pokemon Card Marketplace.
-
 Per completare la registrazione, clicca sul link qui sotto:
 
 {verification_link}
-
-Se non hai richiesto questa registrazione, ignora questa email.
 
 Il link scade tra 24 ore.
 
 ---
 Pokemon Card Marketplace
-Il tuo marketplace di carte Pokemon
 """
     
-    # HTML
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -168,8 +342,6 @@ Il tuo marketplace di carte Pokemon
         
         <p>Grazie per esserti registrato su Pokemon Card Marketplace.</p>
         
-        <p>Per completare la registrazione e iniziare a comprare e vendere carte Pokemon, clicca sul pulsante qui sotto:</p>
-        
         <div style="text-align: center; margin: 30px 0;">
             <a href="{verification_link}" 
                style="background: #667eea; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
@@ -177,7 +349,7 @@ Il tuo marketplace di carte Pokemon
             </a>
         </div>
         
-        <p style="color: #666; font-size: 14px;">Se il pulsante non funziona, copia e incolla questo link nel tuo browser:</p>
+        <p style="color: #666; font-size: 14px;">Se il pulsante non funziona, copia e incolla questo link:</p>
         <p style="background: #fff; padding: 10px; border: 1px solid #ddd; border-radius: 5px; word-wrap: break-word; font-size: 12px;">
             {verification_link}
         </p>
@@ -185,12 +357,8 @@ Il tuo marketplace di carte Pokemon
         <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
         
         <p style="color: #999; font-size: 12px;">
-            Se non hai richiesto questa registrazione, ignora questa email.<br>
-            Il link di verifica scadr&agrave; tra 24 ore.
-        </p>
-        
-        <p style="color: #999; font-size: 12px; margin-top: 20px;">
-            &copy; 2026 Pokemon Card Marketplace. Tutti i diritti riservati.
+            Il link di verifica scadr&agrave; tra 24 ore.<br>
+            &copy; 2026 Pokemon Card Marketplace
         </p>
     </div>
 </body>
@@ -209,11 +377,11 @@ Il tuo marketplace di carte Pokemon
         server.login(from_email, password)
         server.sendmail(from_email, to_email, msg.as_string())
         server.quit()
-        return True
+        return True, "Email inviata"
     except Exception as e:
-        st.error(f"Errore invio email: {e}")
-        return False
+        return False, str(e)
 
+# ==================== USER FUNCTIONS ====================
 def register_user(email, username, password, nome, cognome, indirizzo, citta, cap, provincia, telefono):
     conn = get_connection()
     try:
@@ -239,7 +407,7 @@ def register_user(email, username, password, nome, cognome, indirizzo, citta, ca
         
         success, message = send_verification_email(email, token, username)
         if success:
-            return True, "✅ Registrazione completata! Controlla la tua email per verificare l'account."
+            return True, "✅ Registrazione completata! Controlla la tua email."
         else:
             return True, f"⚠️ Account creato ma errore invio email: {message}"
     except Exception as e:
@@ -268,16 +436,45 @@ def login_user(email_or_username, password):
     conn.close()
     return user
 
-def add_carta(user_id, nome, serie, numero, rarita, lingua, condizione, prezzo, quantita, descrizione, immagine):
+# ==================== CARTE FUNCTIONS CON CACHING ====================
+@st.cache_data(ttl=30)  # Cache 30 secondi
+def get_carte_cached(search="", rarita="", lingua="", min_price=0, max_price=10000):
+    conn = get_connection()
+    query = """SELECT c.*, u.username 
+               FROM carte c 
+               JOIN users u ON c.user_id = u.id 
+               WHERE c.sold = 0"""
+    params = {}
+    
+    if search:
+        query += " AND LOWER(c.nome) LIKE :search"
+        params['search'] = f"%{search.lower()}%"
+    if rarita:
+        query += " AND c.rarita = :rarita"
+        params['rarita'] = rarita
+    if lingua:
+        query += " AND c.lingua = :lingua"
+        params['lingua'] = lingua
+    
+    query += " AND c.prezzo BETWEEN :min_price AND :max_price"
+    params['min_price'] = min_price
+    params['max_price'] = max_price
+    
+    query += " ORDER BY c.created_at DESC"
+    
+    result = conn.execute(text(query), params)
+    carte = result.fetchall()
+    conn.close()
+    return carte
+
+def add_carta(user_id, nome, rarita, lingua, condizione, prezzo, quantita, descrizione, immagine):
     conn = get_connection()
     conn.execute(text("""INSERT INTO carte 
-                 (user_id, nome, serie, numero, rarita, lingua, condizione, prezzo, quantita, descrizione, immagine)
-                 VALUES (:user_id, :nome, :serie, :numero, :rarita, :lingua, :condizione, :prezzo, :quantita, :descrizione, :immagine)"""),
+                 (user_id, nome, rarita, lingua, condizione, prezzo, quantita, descrizione, immagine)
+                 VALUES (:user_id, :nome, :rarita, :lingua, :condizione, :prezzo, :quantita, :descrizione, :immagine)"""),
               {
                   'user_id': user_id,
                   'nome': nome,
-                  'serie': serie,
-                  'numero': numero,
                   'rarita': rarita,
                   'lingua': lingua,
                   'condizione': condizione,
@@ -288,8 +485,10 @@ def add_carta(user_id, nome, serie, numero, rarita, lingua, condizione, prezzo, 
               })
     conn.commit()
     conn.close()
+    get_carte_cached.clear()  # Invalida cache
 
-def get_my_carte(user_id):
+@st.cache_data(ttl=60)
+def get_my_carte_cached(user_id):
     conn = get_connection()
     result = conn.execute(text("SELECT * FROM carte WHERE user_id=:user_id ORDER BY created_at DESC"),
                          {'user_id': user_id})
@@ -297,60 +496,61 @@ def get_my_carte(user_id):
     conn.close()
     return carte
 
-def get_carte(search="", rarita="", serie="", lingua="", min_price=0, max_price=10000):
+def mark_as_sold(carta_id):
     conn = get_connection()
-    query = """SELECT c.*, u.username, u.rating FROM carte c 
-               JOIN users u ON c.user_id = u.id 
-               WHERE c.quantita > 0 AND c.stato='disponibile'"""
-    params = {}
-    
-    if search:
-        query += " AND (c.nome ILIKE :search OR c.descrizione ILIKE :search)"
-        params['search'] = f"%{search}%"
-    if rarita:
-        query += " AND c.rarita = :rarita"
-        params['rarita'] = rarita
-    if serie:
-        query += " AND c.serie ILIKE :serie"
-        params['serie'] = f"%{serie}%"
-    if lingua:
-        query += " AND c.lingua = :lingua"
-        params['lingua'] = lingua
-    
-    query += " AND c.prezzo BETWEEN :min_price AND :max_price"
-    params['min_price'] = min_price
-    params['max_price'] = max_price
-    
-    result = conn.execute(text(query), params)
-    carte = result.fetchall()
+    conn.execute(text("UPDATE carte SET sold=1 WHERE id=:id"), {'id': carta_id})
+    conn.commit()
     conn.close()
-    return carte
+    get_carte_cached.clear()
+    get_my_carte_cached.clear()
 
 def delete_carta(carta_id):
     conn = get_connection()
     conn.execute(text("DELETE FROM carte WHERE id=:id"), {'id': carta_id})
     conn.commit()
     conn.close()
+    get_carte_cached.clear()
+    get_my_carte_cached.clear()
 
-def increment_views(carta_id):
+# ==================== COMMENTI ====================
+def add_comment(carta_id, user_id, comment, rating):
     conn = get_connection()
-    conn.execute(text("UPDATE carte SET views = views + 1 WHERE id=:id"), {'id': carta_id})
+    conn.execute(text("""INSERT INTO comments (carta_id, user_id, comment, rating)
+                 VALUES (:carta_id, :user_id, :comment, :rating)"""),
+              {'carta_id': carta_id, 'user_id': user_id, 'comment': comment, 'rating': rating})
     conn.commit()
     conn.close()
+    get_comments.clear()
 
-def create_ordine(buyer_id, seller_id, carrello, totale, metodo_pagamento, indirizzo):
+@st.cache_data(ttl=30)
+def get_comments(carta_id):
     conn = get_connection()
-    
+    result = conn.execute(text("""SELECT c.*, u.username 
+                         FROM comments c 
+                         JOIN users u ON c.user_id = u.id 
+                         WHERE c.carta_id = :carta_id 
+                         ORDER BY c.created_at DESC"""),
+                         {'carta_id': carta_id})
+    comments = result.fetchall()
+    conn.close()
+    return comments
+
+# ==================== ORDINI ====================
+def create_ordine(buyer_id, seller_id, carrello, totale, metodo, indirizzo, stripe_intent=None):
+    conn = get_connection()
     commissione = totale * 0.05
-    result = conn.execute(text("""INSERT INTO ordini (buyer_id, seller_id, totale, commissione, metodo_pagamento, indirizzo_spedizione)
-                 VALUES (:buyer_id, :seller_id, :totale, :commissione, :metodo, :indirizzo)
+    
+    result = conn.execute(text("""INSERT INTO ordini 
+                 (buyer_id, seller_id, totale, commissione, metodo_pagamento, stripe_payment_intent, indirizzo_spedizione)
+                 VALUES (:buyer_id, :seller_id, :totale, :commissione, :metodo, :stripe_intent, :indirizzo)
                  RETURNING id"""),
               {
                   'buyer_id': buyer_id,
                   'seller_id': seller_id,
                   'totale': totale,
                   'commissione': commissione,
-                  'metodo': metodo_pagamento,
+                  'metodo': metodo,
+                  'stripe_intent': stripe_intent,
                   'indirizzo': indirizzo
               })
     ordine_id = result.fetchone()[0]
@@ -364,13 +564,43 @@ def create_ordine(buyer_id, seller_id, carrello, totale, metodo_pagamento, indir
                       'quantita': item['quantita'],
                       'prezzo': item['prezzo']
                   })
-        conn.execute(text("UPDATE carte SET quantita = quantita - :qta WHERE id = :id"),
+        
+        # Marca come venduta se quantità = 0
+        conn.execute(text("""UPDATE carte 
+                     SET quantita = quantita - :qta,
+                         sold = CASE WHEN quantita - :qta <= 0 THEN 1 ELSE 0 END
+                     WHERE id = :id"""),
                   {'qta': item['quantita'], 'id': item['id']})
     
     conn.commit()
     conn.close()
+    get_carte_cached.clear()
     return ordine_id
 
+# ==================== ADMIN ====================
+@st.cache_data(ttl=60)
+def get_stats():
+    conn = get_connection()
+    
+    r1 = conn.execute(text("SELECT COUNT(*) FROM users"))
+    total_users = r1.fetchone()[0]
+    
+    r2 = conn.execute(text("SELECT COUNT(*) FROM carte"))
+    total_carte = r2.fetchone()[0]
+    
+    r3 = conn.execute(text("SELECT COUNT(*) FROM ordini"))
+    total_ordini = r3.fetchone()[0]
+    
+    r4 = conn.execute(text("SELECT SUM(totale) FROM ordini"))
+    total_revenue = r4.fetchone()[0] or 0
+    
+    r5 = conn.execute(text("SELECT SUM(commissione) FROM ordini"))
+    total_commission = r5.fetchone()[0] or 0
+    
+    conn.close()
+    return total_users, total_carte, total_ordini, total_revenue, total_commission
+
+@st.cache_data(ttl=60)
 def get_all_users():
     conn = get_connection()
     result = conn.execute(text("SELECT * FROM users ORDER BY created_at DESC"))
@@ -378,332 +608,126 @@ def get_all_users():
     conn.close()
     return users
 
+def delete_user(user_id):
+    conn = get_connection()
+    conn.execute(text("DELETE FROM users WHERE id=:id"), {'id': user_id})
+    conn.commit()
+    conn.close()
+    get_all_users.clear()
+
+def toggle_user_status(user_id, status_type):
+    conn = get_connection()
+    if status_type == 'admin':
+        conn.execute(text("UPDATE users SET is_admin = 1 - is_admin WHERE id=:id"), {'id': user_id})
+    else:
+        conn.execute(text("UPDATE users SET is_verified = 1 - is_verified WHERE id=:id"), {'id': user_id})
+    conn.commit()
+    conn.close()
+    get_all_users.clear()
+
+@st.cache_data(ttl=60)
 def get_all_carte_admin():
     conn = get_connection()
-    result = conn.execute(text("""SELECT c.*, u.username FROM carte c 
-                 JOIN users u ON c.user_id = u.id 
-                 ORDER BY c.created_at DESC"""))
+    result = conn.execute(text("""SELECT c.*, u.username 
+                         FROM carte c 
+                         JOIN users u ON c.user_id = u.id 
+                         ORDER BY c.created_at DESC"""))
     carte = result.fetchall()
     conn.close()
     return carte
 
-def get_stats():
-    conn = get_connection()
-    
-    result = conn.execute(text("SELECT COUNT(*) FROM users WHERE is_admin=0"))
-    total_users = result.fetchone()[0]
-    
-    result = conn.execute(text("SELECT COUNT(*) FROM carte"))
-    total_carte = result.fetchone()[0]
-    
-    result = conn.execute(text("SELECT COUNT(*) FROM ordini"))
-    total_ordini = result.fetchone()[0]
-    
-    result = conn.execute(text("SELECT COALESCE(SUM(totale), 0) FROM ordini WHERE stato='completato'"))
-    total_revenue = result.fetchone()[0]
-    
-    result = conn.execute(text("SELECT COALESCE(SUM(commissione), 0) FROM ordini WHERE stato='completato'"))
-    total_commission = result.fetchone()[0]
-    
-    conn.close()
-    return total_users, total_carte, total_ordini, total_revenue, total_commission
-
-def toggle_user_status(user_id, field):
-    conn = get_connection()
-    if field == 'admin':
-        conn.execute(text("UPDATE users SET is_admin = CASE WHEN is_admin = 1 THEN 0 ELSE 1 END WHERE id=:id"), {'id': user_id})
-    elif field == 'verified':
-        conn.execute(text("UPDATE users SET is_verified = CASE WHEN is_verified = 1 THEN 0 ELSE 1 END WHERE id=:id"), {'id': user_id})
-    conn.commit()
-    conn.close()
-
-def delete_user(user_id):
-    conn = get_connection()
-    conn.execute(text("DELETE FROM carte WHERE user_id=:id"), {'id': user_id})
-    conn.execute(text("DELETE FROM users WHERE id=:id"), {'id': user_id})
-    conn.commit()
-    conn.close()
-
-# ==================== CSS ====================
-def load_css():
-    st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
-    
-    .main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 20px;
-    }
-    
-    .pokemon-title {
-        font-size: 3.5rem;
-        font-weight: bold;
-        background: linear-gradient(45deg, #FFCB05, #FF0000, #3B4CCA);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-align: center;
-        padding: 20px;
-        animation: pulse 2s ease-in-out infinite;
-    }
-    
-    @keyframes pulse {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.05); }
-    }
-    
-    .card-container {
-        background: white;
-        border-radius: 20px;
-        padding: 15px;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-        transition: transform 0.3s, box-shadow 0.3s;
-        border: 3px solid #FFCB05;
-        margin: 10px 0;
-    }
-    
-    .card-container:hover {
-        transform: translateY(-10px) rotate(1deg);
-        box-shadow: 0 12px 24px rgba(255,203,5,0.4);
-    }
-    
-    .price-tag {
-        background: linear-gradient(135deg, #FF0000, #CC0000);
-        color: white;
-        padding: 8px 16px;
-        border-radius: 25px;
-        font-weight: bold;
-        font-size: 1.3rem;
-        display: inline-block;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-    }
-    
-    .rarity-badge {
-        background: linear-gradient(135deg, #FFD700, #FFA500);
-        color: #000;
-        padding: 5px 12px;
-        border-radius: 15px;
-        font-weight: 600;
-        font-size: 0.85rem;
-        display: inline-block;
-        margin: 5px 0;
-    }
-    
-    .ultra-rare {
-        background: linear-gradient(135deg, #9333EA, #EC4899);
-        color: white;
-    }
-    
-    .secret-rare {
-        background: linear-gradient(135deg, #000000, #434343);
-        color: #FFD700;
-        animation: glow 2s ease-in-out infinite;
-    }
-    
-    @keyframes glow {
-        0%, 100% { box-shadow: 0 0 10px #FFD700; }
-        50% { box-shadow: 0 0 20px #FFD700, 0 0 30px #FFD700; }
-    }
-    
-    .stButton>button {
-        background: linear-gradient(135deg, #FF0000, #CC0000);
-        color: white;
-        border: none;
-        border-radius: 25px;
-        padding: 10px 25px;
-        font-weight: 600;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        transition: all 0.3s;
-    }
-    
-    .stButton>button:hover {
-        background: linear-gradient(135deg, #CC0000, #990000);
-        transform: scale(1.05);
-        box-shadow: 0 6px 12px rgba(0,0,0,0.3);
-    }
-    
-    .cart-total {
-        background: linear-gradient(135deg, #3B4CCA, #2D3A8C);
-        color: white;
-        padding: 20px;
-        border-radius: 15px;
-        text-align: center;
-        font-size: 1.5rem;
-        font-weight: bold;
-        margin: 20px 0;
-        box-shadow: 0 6px 12px rgba(0,0,0,0.3);
-    }
-    
-    .pokemon-header {
-        background: linear-gradient(135deg, #FFCB05, #FFA500);
-        padding: 30px;
-        border-radius: 20px;
-        margin-bottom: 30px;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-    }
-    
-    .stat-card {
-        background: white;
-        padding: 20px;
-        border-radius: 15px;
-        text-align: center;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        margin: 10px;
-    }
-    
-    .stat-number {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #FF0000;
-    }
-    
-    .stock-low {
-        color: #FF0000;
-        font-weight: bold;
-        animation: blink 1s infinite;
-    }
-    
-    @keyframes blink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-    
-    .pikachu-corner {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 100px;
-        animation: bounce 2s infinite;
-        z-index: 1000;
-    }
-    
-    @keyframes bounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-20px); }
-    }
-    
-    .seller-badge {
-        background: linear-gradient(135deg, #3B4CCA, #2D3A8C);
-        color: white;
-        padding: 5px 12px;
-        border-radius: 15px;
-        font-size: 0.8rem;
-        font-weight: 600;
-        display: inline-block;
-    }
-    
-    .verified-badge {
-        background: linear-gradient(135deg, #10b981, #059669);
-        color: white;
-        padding: 3px 10px;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-    
-    [data-testid="stSidebar"] {
-        display: none;
-    }
-    
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    </style>
-    """, unsafe_allow_html=True)
+# ==================== PAGAMENTI STRIPE ====================
+def create_stripe_payment(amount):
+    """
+    Integrazione Stripe per pagamenti
+    Richiede: pip install stripe
+    """
+    try:
+        import stripe
+        stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY", "sk_test_...")
+        
+        # Crea payment intent
+        intent = stripe.PaymentIntent.create(
+            amount=int(amount * 100),  # Centesimi
+            currency="eur",
+            metadata={'integration_check': 'accept_a_payment'}
+        )
+        
+        return intent.id, intent.client_secret
+    except Exception as e:
+        st.error(f"Errore Stripe: {e}")
+        return None, None
 
 # ==================== SESSION STATE ====================
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
-if 'user' not in st.session_state:
     st.session_state.user = None
-if 'carrello' not in st.session_state:
-    st.session_state.carrello = []
-if 'page' not in st.session_state:
     st.session_state.page = 'marketplace'
+    st.session_state.carrello = []
+    st.session_state.processing = False  # Per evitare doppi submit
 
+# ==================== INIT DB ====================
 init_db()
 
-st.set_page_config(page_title="⚡ Pokemon Marketplace", page_icon="⚡", layout="wide")
-load_css()
-
-# Pikachu animato
-st.markdown("""
-<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" 
-     class="pikachu-corner">
-""", unsafe_allow_html=True)
-
-# Check email verification
+# ==================== VERIFICA EMAIL TOKEN ====================
 query_params = st.query_params
 if 'verify' in query_params:
-    if verify_user(query_params['verify']):
-        st.success("✅ Email verificata con successo! Ora puoi effettuare il login.")
-        st.balloons()
+    token = query_params['verify']
+    if verify_user(token):
+        st.success("✅ Account verificato! Ora puoi accedere.")
+        time.sleep(2)
+        st.query_params.clear()
+        st.rerun()
     else:
-        st.error("❌ Token di verifica non valido")
+        st.error("❌ Token non valido o scaduto")
 
-# ==================== NAVBAR ====================
-st.markdown('<h1 class="pokemon-title">⚡ POKEMON MARKETPLACE</h1>', unsafe_allow_html=True)
-
+# ==================== SIDEBAR MENU ====================
 if st.session_state.logged_in:
-    col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1, 1, 1, 1, 1, 1])
-    
-    with col1:
+    with st.sidebar:
+        st.markdown(f"### 👤 @{st.session_state.user[2]}")
+        st.caption(f"⭐ {st.session_state.user[14]:.1f}")
+        
         if st.button("🏪 Marketplace", use_container_width=True):
             st.session_state.page = 'marketplace'
             st.rerun()
-    
-    with col2:
-        if st.button("➕ Vendi", use_container_width=True):
+        
+        if st.button("💰 Vendi", use_container_width=True):
             st.session_state.page = 'sell'
             st.rerun()
-    
-    with col3:
-        if st.button("📦 Mie Carte", use_container_width=True):
+        
+        if st.button("📦 Le Mie Carte", use_container_width=True):
             st.session_state.page = 'my_cards'
             st.rerun()
-    
-    with col4:
-        cart_label = f"🛒 Carrello ({len(st.session_state.carrello)})"
-        if st.button(cart_label, use_container_width=True):
+        
+        cart_count = len(st.session_state.carrello)
+        if st.button(f"🛒 Carrello ({cart_count})", use_container_width=True):
             st.session_state.page = 'cart'
             st.rerun()
-    
-    with col5:
+        
         if st.session_state.user[11]:  # is_admin
             if st.button("👑 Admin", use_container_width=True):
                 st.session_state.page = 'admin'
                 st.rerun()
-        else:
-            st.write(f"👤 @{st.session_state.user[2]}")
-    
-    with col6:
-        st.write(f"⭐ {st.session_state.user[14]:.1f}")
-    
-    with col7:
-        if st.button("🚪 Logout", use_container_width=True):
+        
+        st.divider()
+        
+        if st.button("🚪 Logout", use_container_width=True, type="secondary"):
             st.session_state.logged_in = False
             st.session_state.user = None
             st.session_state.carrello = []
-            st.session_state.page = 'marketplace'
             st.rerun()
 
-st.divider()
-
-# ==================== MAIN CONTENT ====================
-
-# Pagina Login/Registrazione
-if not st.session_state.logged_in and st.session_state.page == 'marketplace':
+# ==================== PAGINE ====================
+if not st.session_state.logged_in:
+    st.markdown('<h1 class="pokemon-title">🎴 POKEMON CARD MARKETPLACE</h1>', unsafe_allow_html=True)
     
-    # Header Pokemon
     st.markdown("""
-    <div class="pokemon-header">
-        <div style="display: flex; justify-content: space-around; align-items: center;">
+    <div style="text-align: center; padding: 20px;">
+        <div style="display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap;">
             <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/1.png" width="80">
             <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/4.png" width="80">
             <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/7.png" width="80">
             <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" width="80">
-            <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/133.png" width="80">
-            <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/143.png" width="80">
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -714,59 +738,68 @@ if not st.session_state.logged_in and st.session_state.page == 'marketplace':
         with st.form("login_form", clear_on_submit=True):
             st.markdown("### 🔑 Accedi al tuo account")
             
-            login_id = st.text_input("📧 Email o Username", placeholder="mario.rossi@email.com")
+            login_id = st.text_input("📧 Email o Username")
             login_pass = st.text_input("🔒 Password", type="password")
             
-            submitted = st.form_submit_button("🚀 ACCEDI", use_container_width=True, type="primary")
+            submitted = st.form_submit_button(
+                "🚀 ACCEDI",
+                use_container_width=True,
+                type="primary",
+                disabled=st.session_state.processing
+            )
             
             if submitted:
-                user = login_user(login_id, login_pass)
-                if user:
-                    if user[12]:  # is_verified
-                        st.session_state.logged_in = True
-                        st.session_state.user = user
-                        st.success(f"✅ Benvenuto @{user[2]}!")
-                        st.rerun()
+                st.session_state.processing = True
+                with st.spinner("Verifica credenziali..."):
+                    user = login_user(login_id, login_pass)
+                    if user:
+                        if user[12]:  # is_verified
+                            st.session_state.logged_in = True
+                            st.session_state.user = user
+                            st.session_state.processing = False
+                            st.success(f"✅ Benvenuto @{user[2]}!")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.session_state.processing = False
+                            st.error("❌ Devi verificare la tua email!")
                     else:
-                        st.error("❌ Devi verificare la tua email prima di accedere!")
-                        st.info("📧 Controlla la tua casella email oppure usa il form qui sotto per ricevere un nuovo link.")
-                else:
-                    st.error("❌ Credenziali non valide")
+                        st.session_state.processing = False
+                        st.error("❌ Credenziali non valide")
         
-        # ✅ NUOVO: Form per reinviare email di verifica
         st.divider()
-        st.markdown("#### 📧 Non hai ricevuto l'email di verifica?")
+        st.markdown("#### 📧 Non hai ricevuto l'email?")
         
         with st.form("resend_form"):
-            resend_email = st.text_input("Inserisci la tua email", key="resend_email_input")
-            resend_submitted = st.form_submit_button("📨 Reinvia Email di Verifica")
+            resend_email = st.text_input("Email")
+            resend_submitted = st.form_submit_button("📨 Reinvia")
             
             if resend_submitted and resend_email:
-                conn = get_connection()
-                result = conn.execute(text("SELECT * FROM users WHERE email=:email AND is_verified=0"),
-                                     {'email': resend_email})
-                user_to_verify = result.fetchone()
-                conn.close()
-                
-                if user_to_verify:
-                    send_verification_email(user_to_verify[1], user_to_verify[13], user_to_verify[2])
-                    st.success("✅ Email di verifica reinviata! Controlla la tua casella.")
-                else:
-                    st.error("❌ Email non trovata o account già verificato")
+                with st.spinner("Invio email..."):
+                    conn = get_connection()
+                    result = conn.execute(text("SELECT * FROM users WHERE email=:email AND is_verified=0"),
+                                         {'email': resend_email})
+                    user_to_verify = result.fetchone()
+                    conn.close()
+                    
+                    if user_to_verify:
+                        send_verification_email(user_to_verify[1], user_to_verify[13], user_to_verify[2])
+                        st.success("✅ Email reinviata!")
+                    else:
+                        st.error("❌ Email non trovata")
     
     with tab2:
-        # ✅ CORRETTO: clear_on_submit=False per non cancellare il form in caso di errore
         with st.form("register_form", clear_on_submit=False):
             st.markdown("### 📝 Crea il tuo account")
             
-            reg_email = st.text_input("📧 Email*", placeholder="mario.rossi@email.com", key="reg_email")
-            reg_username = st.text_input("👤 Username*", placeholder="mario_rossi", key="reg_username")
+            reg_email = st.text_input("📧 Email*", key="reg_email")
+            reg_username = st.text_input("👤 Username*", key="reg_username")
             
             col1, col2 = st.columns(2)
             with col1:
-                reg_pass = st.text_input("🔒 Password*", type="password", placeholder="Min 6 caratteri", key="reg_pass")
+                reg_pass = st.text_input("🔒 Password*", type="password", key="reg_pass")
             with col2:
-                reg_pass_confirm = st.text_input("🔒 Conferma Password*", type="password", key="reg_pass_confirm")
+                reg_pass_confirm = st.text_input("🔒 Conferma*", type="password", key="reg_pass_confirm")
             
             st.divider()
             
@@ -776,54 +809,62 @@ if not st.session_state.logged_in and st.session_state.page == 'marketplace':
             with col2:
                 reg_cognome = st.text_input("Cognome*", key="reg_cognome")
             
-            reg_indirizzo = st.text_input("📍 Indirizzo", placeholder="Via Roma 123", key="reg_indirizzo")
+            reg_indirizzo = st.text_input("📍 Indirizzo", key="reg_indirizzo")
             
             col1, col2, col3 = st.columns(3)
             with col1:
-                reg_citta = st.text_input("Città", placeholder="Milano", key="reg_citta")
+                reg_citta = st.text_input("Città", key="reg_citta")
             with col2:
-                reg_cap = st.text_input("CAP", placeholder="20100", key="reg_cap")
+                reg_cap = st.text_input("CAP", key="reg_cap")
             with col3:
-                reg_provincia = st.text_input("Provincia", placeholder="MI", key="reg_provincia")
+                reg_provincia = st.text_input("Provincia", key="reg_provincia")
             
-            reg_telefono = st.text_input("📱 Telefono", placeholder="+39 333 1234567", key="reg_telefono")
+            reg_telefono = st.text_input("📱 Telefono", key="reg_telefono")
+            reg_privacy = st.checkbox("✅ Accetto termini*", key="reg_privacy")
             
-            reg_privacy = st.checkbox("✅ Accetto termini e condizioni*", key="reg_privacy")
-            
-            submitted = st.form_submit_button("✅ REGISTRATI ORA", use_container_width=True, type="primary")
+            submitted = st.form_submit_button(
+                "✅ REGISTRATI",
+                use_container_width=True,
+                type="primary",
+                disabled=st.session_state.processing
+            )
             
             if submitted:
+                st.session_state.processing = True
                 if not reg_privacy:
-                    st.error("❌ Devi accettare i termini e condizioni")
+                    st.session_state.processing = False
+                    st.error("❌ Accetta termini")
                 elif reg_pass != reg_pass_confirm:
-                    st.error("❌ Le password non corrispondono")
+                    st.session_state.processing = False
+                    st.error("❌ Password diverse")
                 elif len(reg_pass) < 6:
-                    st.error("❌ Password troppo corta (minimo 6 caratteri)")
+                    st.session_state.processing = False
+                    st.error("❌ Password corta")
                 elif not reg_email or not reg_username or not reg_nome or not reg_cognome:
-                    st.error("❌ Compila tutti i campi obbligatori (*)")
+                    st.session_state.processing = False
+                    st.error("❌ Compila campi obbligatori")
                 else:
-                    success, message = register_user(
-                        reg_email, reg_username, reg_pass, reg_nome, reg_cognome,
-                        reg_indirizzo, reg_citta, reg_cap, reg_provincia, reg_telefono
-                    )
-                    if success:
-                        st.success(message)
-                        st.balloons()
-                        st.info("📧 Controlla la tua casella email e clicca sul link di verifica!")
-                        
-                        # ✅ NUOVO: Reset form solo dopo successo
-                        for key in list(st.session_state.keys()):
-                            if key.startswith('reg_'):
-                                del st.session_state[key]
-                        st.rerun()
-                    else:
-                        st.error(message)
+                    with st.spinner("Creazione account..."):
+                        success, message = register_user(
+                            reg_email, reg_username, reg_pass, reg_nome, reg_cognome,
+                            reg_indirizzo, reg_citta, reg_cap, reg_provincia, reg_telefono
+                        )
+                        st.session_state.processing = False
+                        if success:
+                            st.success(message)
+                            for key in list(st.session_state.keys()):
+                                if key.startswith('reg_'):
+                                    del st.session_state[key]
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error(message)
 
-# Resto delle pagine (solo se loggato)
 elif st.session_state.logged_in:
     
+    # ==================== ADMIN ====================
     if st.session_state.page == 'admin' and st.session_state.user[11]:
-        st.markdown('<h2 class="pokemon-title">👑 PANNELLO ADMIN</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 class="pokemon-title">👑 ADMIN</h2>', unsafe_allow_html=True)
         
         admin_menu = st.radio("", ["📊 Dashboard", "👥 Utenti", "🎴 Carte"], horizontal=True)
         
@@ -832,25 +873,13 @@ elif st.session_state.logged_in:
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.markdown(f'''<div class="stat-card">
-                    <div class="stat-number">{total_users}</div>
-                    <div>👥 Utenti</div>
-                </div>''', unsafe_allow_html=True)
+                st.metric("👥 Utenti", total_users)
             with col2:
-                st.markdown(f'''<div class="stat-card">
-                    <div class="stat-number">{total_carte}</div>
-                    <div>🎴 Carte</div>
-                </div>''', unsafe_allow_html=True)
+                st.metric("🎴 Carte", total_carte)
             with col3:
-                st.markdown(f'''<div class="stat-card">
-                    <div class="stat-number">{total_ordini}</div>
-                    <div>📦 Ordini</div>
-                </div>''', unsafe_allow_html=True)
+                st.metric("📦 Ordini", total_ordini)
             with col4:
-                st.markdown(f'''<div class="stat-card">
-                    <div class="stat-number">€{total_commission:.0f}</div>
-                    <div>💰 Commissioni</div>
-                </div>''', unsafe_allow_html=True)
+                st.metric("💰 Commissioni", f"€{total_commission:.0f}")
         
         elif admin_menu == "👥 Utenti":
             users = get_all_users()
@@ -883,19 +912,22 @@ elif st.session_state.logged_in:
             for carta in carte:
                 col1, col2, col3, col4 = st.columns([1, 3, 2, 1])
                 with col1:
-                    if carta[11]:
-                        img = Image.open(io.BytesIO(carta[11]))
+                    if carta[9]:
+                        img = Image.open(io.BytesIO(carta[9]))
                         st.image(img, width=80)
                 with col2:
                     st.write(f"**{carta[2]}**")
-                    st.caption(f"@{carta[17]}")
+                    st.caption(f"@{carta[13]}")
+                    if carta[10]:  # sold
+                        st.markdown('<span class="sold-badge">VENDUTA</span>', unsafe_allow_html=True)
                 with col3:
-                    st.write(f"€{carta[8]:.2f} | {carta[9]} pz")
+                    st.write(f"€{carta[6]:.2f} | {carta[7]} pz")
                 with col4:
                     if st.button("🗑️", key=f"del_c_{carta[0]}"):
                         delete_carta(carta[0])
                         st.rerun()
     
+    # ==================== VENDI ====================
     elif st.session_state.page == 'sell':
         st.markdown("## ➕ Vendi le tue Carte")
         
@@ -912,20 +944,14 @@ elif st.session_state.logged_in:
                 
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    serie = st.text_input("📚 Serie*")
-                with col_b:
-                    numero = st.text_input("#️⃣ Numero*")
-                
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    rarita = st.selectbox("⭐ Rarità*", 
-                        ["Comune", "Non Comune", "Rara", "Holo Rara", "Ultra Rara", 
+                    rarita = st.selectbox("⭐ Rarità*",
+                        ["Comune", "Non Comune", "Rara", "Holo Rara", "Ultra Rara",
                          "Full Art", "Rainbow Rare", "Secret Rare"])
                 with col_b:
-                    lingua = st.selectbox("🌍 Lingua*", 
+                    lingua = st.selectbox("🌍 Lingua*",
                         ["Italiano", "Inglese", "Giapponese", "Francese"])
                 
-                condizione = st.selectbox("💎 Condizione*", 
+                condizione = st.selectbox("💎 Condizione*",
                     ["Near Mint (NM)", "Excellent (EX)", "Very Good (VG)"])
                 
                 col_a, col_b = st.columns(2)
@@ -936,22 +962,33 @@ elif st.session_state.logged_in:
                 
                 descrizione = st.text_area("📝 Descrizione")
             
-            submitted = st.form_submit_button("✅ Pubblica", use_container_width=True, type="primary")
+            submitted = st.form_submit_button(
+                "✅ Pubblica",
+                use_container_width=True,
+                type="primary",
+                disabled=st.session_state.processing
+            )
             
             if submitted:
-                if not immagine_file or not nome or not serie or not numero:
+                st.session_state.processing = True
+                if not immagine_file or not nome:
+                    st.session_state.processing = False
                     st.error("❌ Compila tutti i campi *")
                 else:
-                    img_bytes = immagine_file.read()
-                    add_carta(st.session_state.user[0], nome, serie, numero, rarita, lingua, 
-                             condizione, prezzo, quantita, descrizione, img_bytes)
-                    st.success("🎉 Carta pubblicata!")
-                    st.balloons()
+                    with st.spinner("Pubblicazione carta..."):
+                        img_bytes = immagine_file.read()
+                        add_carta(st.session_state.user[0], nome, rarita, lingua,
+                                 condizione, prezzo, quantita, descrizione, img_bytes)
+                        st.session_state.processing = False
+                        st.success("🎉 Carta pubblicata!")
+                        time.sleep(1)
+                        st.rerun()
     
+    # ==================== LE MIE CARTE ====================
     elif st.session_state.page == 'my_cards':
         st.markdown("## 📦 Le Mie Carte")
         
-        my_carte = get_my_carte(st.session_state.user[0])
+        my_carte = get_my_carte_cached(st.session_state.user[0])
         
         if not my_carte:
             st.info("📭 Nessuna carta pubblicata")
@@ -965,31 +1002,35 @@ elif st.session_state.logged_in:
                         with col:
                             st.markdown('<div class="card-container">', unsafe_allow_html=True)
                             
-                            if carta[11]:
-                                img = Image.open(io.BytesIO(carta[11]))
+                            if carta[9]:
+                                img = Image.open(io.BytesIO(carta[9]))
                                 st.image(img, use_container_width=True)
                             
                             st.markdown(f"### {carta[2]}")
-                            st.caption(f"{carta[3]} - #{carta[4]}")
                             
-                            rarity_class = ""
-                            if carta[5] in ["Ultra Rara", "Full Art", "Rainbow Rare"]:
-                                rarity_class = "ultra-rare"
-                            elif "Secret" in carta[5]:
-                                rarity_class = "secret-rare"
+                            # Badge venduta
+                            if carta[10]:  # sold
+                                st.markdown('<span class="sold-badge">VENDUTA</span>', unsafe_allow_html=True)
+                            else:
+                                st.markdown(f'<span class="rarity-badge">{carta[3]}</span>',
+                                           unsafe_allow_html=True)
                             
-                            st.markdown(f'<span class="rarity-badge {rarity_class}">{carta[5]}</span>', 
-                                       unsafe_allow_html=True)
+                            st.markdown(f'<div class="price-tag">€{carta[6]:.2f}</div>', unsafe_allow_html=True)
+                            st.write(f"📦 {carta[7]} | 👁️ {carta[11]}")
                             
-                            st.markdown(f'<div class="price-tag">€{carta[8]:.2f}</div>', unsafe_allow_html=True)
-                            st.write(f"📦 {carta[9]} | 👁️ {carta[13]}")
-                            
-                            if st.button("🗑️ Elimina", key=f"del_{carta[0]}", use_container_width=True):
-                                delete_carta(carta[0])
-                                st.rerun()
+                            col_a, col_b = st.columns(2)
+                            with col_a:
+                                if not carta[10] and st.button("✅ Venduta", key=f"sold_{carta[0]}", use_container_width=True):
+                                    mark_as_sold(carta[0])
+                                    st.rerun()
+                            with col_b:
+                                if st.button("🗑️ Elimina", key=f"del_{carta[0]}", use_container_width=True):
+                                    delete_carta(carta[0])
+                                    st.rerun()
                             
                             st.markdown('</div>', unsafe_allow_html=True)
     
+    # ==================== CARRELLO ====================
     elif st.session_state.page == 'cart':
         st.markdown("## 🛒 Il Tuo Carrello")
         
@@ -1010,35 +1051,75 @@ elif st.session_state.logged_in:
                         st.rerun()
             
             totale = sum(item['prezzo'] * item['quantita'] for item in st.session_state.carrello)
-            st.markdown(f'<div class="cart-total">💰 TOTALE: €{totale:.2f}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size: 2rem; font-weight: bold; color: var(--accent-primary); margin: 2rem 0;">💰 TOTALE: €{totale:.2f}</div>', unsafe_allow_html=True)
             
             col1, col2 = st.columns(2)
             with col1:
-                metodo = st.selectbox("💳 Pagamento", ["PayPal", "Satispay", "Carta"])
+                metodo = st.selectbox("💳 Pagamento", ["Stripe", "PayPal", "Bonifico"])
             with col2:
                 user = st.session_state.user
                 indirizzo_default = f"{user[6]}, {user[7]} {user[8]}" if user[6] else ""
                 indirizzo = st.text_area("📍 Indirizzo", value=indirizzo_default)
             
-            if st.button("💳 PAGA ORA", type="primary", use_container_width=True):
-                seller_id = st.session_state.carrello[0]['seller_id']
-                ordine_id = create_ordine(st.session_state.user[0], seller_id, 
-                                         st.session_state.carrello, totale, metodo, indirizzo)
-                st.success(f"🎉 Ordine #{ordine_id} creato!")
-                st.balloons()
-                st.session_state.carrello = []
-                st.rerun()
+            if st.button(
+                "💳 PAGA ORA",
+                type="primary",
+                use_container_width=True,
+                disabled=st.session_state.processing
+            ):
+                st.session_state.processing = True
+                
+                with st.spinner("Elaborazione pagamento..."):
+                    if metodo == "Stripe":
+                        # Integrazione Stripe
+                        intent_id, client_secret = create_stripe_payment(totale)
+                        if intent_id:
+                            seller_id = st.session_state.carrello[0]['seller_id']
+                            ordine_id = create_ordine(
+                                st.session_state.user[0],
+                                seller_id,
+                                st.session_state.carrello,
+                                totale,
+                                metodo,
+                                indirizzo,
+                                intent_id
+                            )
+                            st.session_state.processing = False
+                            st.success(f"🎉 Ordine #{ordine_id} creato!")
+                            st.session_state.carrello = []
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.session_state.processing = False
+                            st.error("Errore pagamento Stripe")
+                    else:
+                        # Altri metodi
+                        seller_id = st.session_state.carrello[0]['seller_id']
+                        ordine_id = create_ordine(
+                            st.session_state.user[0],
+                            seller_id,
+                            st.session_state.carrello,
+                            totale,
+                            metodo,
+                            indirizzo
+                        )
+                        st.session_state.processing = False
+                        st.success(f"🎉 Ordine #{ordine_id} creato!")
+                        st.session_state.carrello = []
+                        time.sleep(2)
+                        st.rerun()
     
-    else:  # Marketplace
+    # ==================== MARKETPLACE ====================
+    else:
+        st.markdown('<h1 class="pokemon-title">🏪 MARKETPLACE</h1>', unsafe_allow_html=True)
+        
         st.markdown("""
-        <div class="pokemon-header">
-            <div style="display: flex; justify-content: space-around; align-items: center;">
-                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/1.png" width="80">
-                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/4.png" width="80">
-                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/7.png" width="80">
-                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" width="80">
-                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/133.png" width="80">
-                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/143.png" width="80">
+        <div style="text-align: center; padding: 10px;">
+            <div style="display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap;">
+                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" width="60">
+                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/6.png" width="60">
+                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/9.png" width="60">
+                <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/150.png" width="60">
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1047,22 +1128,25 @@ elif st.session_state.logged_in:
         with col1:
             search = st.text_input("🔍 Cerca")
         with col2:
-            rarita_filter = st.selectbox("⭐ Rarità", 
+            rarita_filter = st.selectbox("⭐ Rarità",
                 ["Tutte", "Comune", "Non Comune", "Rara", "Holo Rara", "Ultra Rara", "Secret Rare"])
         with col3:
-            lingua_filter = st.selectbox("🌍 Lingua", 
+            lingua_filter = st.selectbox("🌍 Lingua",
                 ["Tutte", "Italiano", "Inglese", "Giapponese"])
         with col4:
-            serie_filter = st.text_input("📚 Serie")
+            max_price = st.number_input("💰 Max €", min_value=0, value=1000, step=50)
         
         rarita = rarita_filter if rarita_filter != "Tutte" else ""
         lingua = lingua_filter if lingua_filter != "Tutte" else ""
         
-        carte = get_carte(search, rarita, serie_filter, lingua)
+        with st.spinner("Caricamento carte..."):
+            carte = get_carte_cached(search, rarita, lingua, 0, max_price)
         
         if not carte:
             st.info("🔍 Nessuna carta trovata")
         else:
+            st.write(f"**{len(carte)} carte trovate**")
+            
             cols_per_row = 4
             for i in range(0, len(carte), cols_per_row):
                 cols = st.columns(cols_per_row)
@@ -1072,45 +1156,65 @@ elif st.session_state.logged_in:
                         with col:
                             st.markdown('<div class="card-container">', unsafe_allow_html=True)
                             
-                            if carta[11]:
-                                img = Image.open(io.BytesIO(carta[11]))
+                            if carta[9]:
+                                img = Image.open(io.BytesIO(carta[9]))
                                 st.image(img, use_container_width=True)
-                                increment_views(carta[0])
                             
                             st.markdown(f"### {carta[2]}")
-                            st.caption(f"{carta[3]} - #{carta[4]}")
+                            st.markdown(f'<span class="seller-badge">@{carta[12]}</span>', unsafe_allow_html=True)
                             
-                            st.markdown(f'<span class="seller-badge">@{carta[16]}</span>', unsafe_allow_html=True)
-                            
-                            rarity_class = ""
-                            if carta[5] in ["Ultra Rara", "Full Art", "Rainbow Rare"]:
-                                rarity_class = "ultra-rare"
-                            elif "Secret" in carta[5]:
-                                rarity_class = "secret-rare"
-                            
-                            st.markdown(f'<span class="rarity-badge {rarity_class}">{carta[5]}</span>', 
+                            st.markdown(f'<span class="rarity-badge">{carta[3]}</span>',
                                        unsafe_allow_html=True)
                             
-                            st.write(f"💎 {carta[7]}")
-                            st.markdown(f'<div class="price-tag">€{carta[8]:.2f}</div>', unsafe_allow_html=True)
+                            st.write(f"💎 {carta[5]}")
+                            st.markdown(f'<div class="price-tag">€{carta[6]:.2f}</div>', unsafe_allow_html=True)
                             
-                            if carta[9] < 5:
-                                st.markdown(f'<span class="stock-low">⚠️ {carta[9]} pz!</span>', unsafe_allow_html=True)
+                            if carta[7] < 5:
+                                st.warning(f"⚠️ Solo {carta[7]} pz!")
                             else:
-                                st.write(f"📦 {carta[9]} disponibili")
+                                st.write(f"📦 {carta[7]} disponibili")
                             
-                            qta = st.number_input("Qta", min_value=1, max_value=carta[9], 
+                            # Sistema commenti
+                            with st.expander("💬 Commenti"):
+                                comments = get_comments(carta[0])
+                                
+                                if comments:
+                                    for comment in comments:
+                                        st.markdown(f"""
+                                        <div class="comment-box">
+                                            <div class="comment-author">@{comment[5]} {'⭐' * comment[4]}</div>
+                                            <div>{comment[3]}</div>
+                                            <small style="color: var(--text-secondary);">{comment[6]}</small>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                                else:
+                                    st.info("Nessun commento")
+                                
+                                with st.form(f"comment_{carta[0]}"):
+                                    new_comment = st.text_area("Scrivi un commento", key=f"cmt_{carta[0]}")
+                                    rating = st.select_slider("Valutazione", options=[1,2,3,4,5], value=5, key=f"rat_{carta[0]}")
+                                    
+                                    if st.form_submit_button("Invia"):
+                                        if new_comment:
+                                            add_comment(carta[0], st.session_state.user[0], new_comment, rating)
+                                            st.success("Commento aggiunto!")
+                                            st.rerun()
+                            
+                            qta = st.number_input("Qta", min_value=1, max_value=carta[7],
                                                  value=1, key=f"qta_{carta[0]}")
+                            
                             if st.button("🛒 Aggiungi", key=f"add_{carta[0]}", use_container_width=True):
                                 item = {
                                     'id': carta[0],
                                     'nome': carta[2],
-                                    'prezzo': carta[8],
+                                    'prezzo': carta[6],
                                     'quantita': qta,
                                     'seller_id': carta[1]
                                 }
                                 st.session_state.carrello.append(item)
                                 st.success("✅ Aggiunto!")
+                                time.sleep(0.5)
                                 st.rerun()
                             
                             st.markdown('</div>', unsafe_allow_html=True)
+
