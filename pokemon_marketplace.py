@@ -7,7 +7,7 @@ from decimal import Decimal
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import QueuePool
 from datetime import datetime as dt
-import stripe
+
 
 # ==================== Pagina unica, temi, velocità ====================
 st.set_page_config(
