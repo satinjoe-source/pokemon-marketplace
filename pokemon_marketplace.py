@@ -1,4 +1,4 @@
-# pokemon_marketplace.py - VERSIONE FIXATA PER CACHE
+# pokemon_marketplace.py - VERSIONE CORRETTA (Sostituisci tutto il file con questo)
 import streamlit as st
 import hashlib
 import secrets
@@ -181,13 +181,19 @@ DATABASE_URL = st.secrets.get('DATABASE_URL', 'sqlite:///pokemon_marketplace.db'
 if DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://')
 
-# Connection pooling per performance
+# Configurazione Engine
+# Se usi SQLite locale, aggiungiamo check_same_thread=False per evitare errori di thread
+connect_args = {}
+if 'sqlite' in DATABASE_URL:
+    connect_args = {"check_same_thread": False}
+
 engine = create_engine(
     DATABASE_URL,
     poolclass=QueuePool,
     pool_size=5,
     max_overflow=10,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    connect_args=connect_args
 )
 
 EMAIL_CONFIG = {
@@ -301,8 +307,8 @@ def hash_password(password):
 
 # ==================== EMAIL ====================
 def send_verification_email(to_email, token, username):
-    from_email = st.secrets["EMAIL_USER"]
-    password = st.secrets["EMAIL_PASSWORD"]
+    from_email = st.secrets.get("EMAIL_USER", "noreply@pokemon.com")
+    password = st.secrets.get("EMAIL_PASSWORD", "")
     
     msg = MIMEMultipart('alternative')
     msg['Subject'] = 'Conferma il tuo account - Pokemon Card Marketplace'
@@ -372,6 +378,9 @@ Pokemon Card Marketplace
     msg.attach(part2)
     
     try:
+        if not password:
+            return True, "Email simulate (missing secrets)"
+            
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(from_email, password)
@@ -436,7 +445,7 @@ def login_user(email_or_username, password):
     conn.close()
     return user
 
-# ==================== CARTE FUNCTIONS CON CACHING FIXATO ====================
+# ==================== CARTE FUNCTIONS CON FIX PER CACHE ====================
 @st.cache_data(ttl=30)
 def get_carte_cached(search="", rarita="", lingua="", min_price=0, max_price=10000):
     conn = get_connection()
@@ -463,7 +472,7 @@ def get_carte_cached(search="", rarita="", lingua="", min_price=0, max_price=100
     query += " ORDER BY c.created_at DESC"
     
     result = conn.execute(text(query), params)
-    # FIX: Converti righe SQLAlchemy in tuple
+    # FIX IMPORTANTE: Conversione esplicita in tuple per evitare errori di pickling
     carte = [tuple(row) for row in result.fetchall()]
     conn.close()
     return carte
@@ -486,14 +495,14 @@ def add_carta(user_id, nome, rarita, lingua, condizione, prezzo, quantita, descr
               })
     conn.commit()
     conn.close()
-    get_carte_cached.clear()  # Invalida cache
+    get_carte_cached.clear()
 
 @st.cache_data(ttl=60)
 def get_my_carte_cached(user_id):
     conn = get_connection()
     result = conn.execute(text("SELECT * FROM carte WHERE user_id=:user_id ORDER BY created_at DESC"),
                          {'user_id': user_id})
-    # FIX: Converti righe SQLAlchemy in tuple
+    # FIX IMPORTANTE
     carte = [tuple(row) for row in result.fetchall()]
     conn.close()
     return carte
@@ -514,7 +523,7 @@ def delete_carta(carta_id):
     get_carte_cached.clear()
     get_my_carte_cached.clear()
 
-# ==================== COMMENTI CON CACHING FIXATO ====================
+# ==================== COMMENTI ====================
 def add_comment(carta_id, user_id, comment, rating):
     conn = get_connection()
     conn.execute(text("""INSERT INTO comments (carta_id, user_id, comment, rating)
@@ -533,7 +542,7 @@ def get_comments(carta_id):
                          WHERE c.carta_id = :carta_id 
                          ORDER BY c.created_at DESC"""),
                          {'carta_id': carta_id})
-    # FIX: Converti righe SQLAlchemy in tuple
+    # FIX IMPORTANTE
     comments = [tuple(row) for row in result.fetchall()]
     conn.close()
     return comments
@@ -543,44 +552,58 @@ def create_ordine(buyer_id, seller_id, carrello, totale, metodo, indirizzo, stri
     conn = get_connection()
     commissione = totale * 0.05
     
-    result = conn.execute(text("""INSERT INTO ordini 
-                 (buyer_id, seller_id, totale, commissione, metodo_pagamento, stripe_payment_intent, indirizzo_spedizione)
-                 VALUES (:buyer_id, :seller_id, :totale, :commissione, :metodo, :stripe_intent, :indirizzo)
-                 RETURNING id"""),
-              {
-                  'buyer_id': buyer_id,
-                  'seller_id': seller_id,
-                  'totale': totale,
-                  'commissione': commissione,
-                  'metodo': metodo,
-                  'stripe_intent': stripe_intent,
-                  'indirizzo': indirizzo
-              })
-    ordine_id = result.fetchone()[0]
-    
-    for item in carrello:
-        conn.execute(text("""INSERT INTO ordini_dettagli (ordine_id, carta_id, quantita, prezzo)
-                     VALUES (:ordine_id, :carta_id, :quantita, :prezzo)"""),
+    try:
+        # 1. Crea ordine
+        result = conn.execute(text("""INSERT INTO ordini 
+                     (buyer_id, seller_id, totale, commissione, metodo_pagamento, stripe_payment_intent, indirizzo_spedizione)
+                     VALUES (:buyer_id, :seller_id, :totale, :commissione, :metodo, :stripe_intent, :indirizzo)
+                     RETURNING id"""),
                   {
-                      'ordine_id': ordine_id,
-                      'carta_id': item['id'],
-                      'quantita': item['quantita'],
-                      'prezzo': item['prezzo']
+                      'buyer_id': buyer_id,
+                      'seller_id': seller_id,
+                      'totale': totale,
+                      'commissione': commissione,
+                      'metodo': metodo,
+                      'stripe_intent': stripe_intent,
+                      'indirizzo': indirizzo
                   })
+        # Compatibilità con versioni diverse di SQLAlchemy/DB
+        row = result.fetchone()
+        ordine_id = row[0] if row else None
         
-        # Marca come venduta se quantità = 0
-        conn.execute(text("""UPDATE carte 
-                     SET quantita = quantita - :qta,
-                         sold = CASE WHEN quantita - :qta <= 0 THEN 1 ELSE 0 END
-                     WHERE id = :id"""),
-                  {'qta': item['quantita'], 'id': item['id']})
-    
-    conn.commit()
-    conn.close()
-    get_carte_cached.clear()
-    return ordine_id
+        if not ordine_id:
+            # Fallback se RETURNING non è supportato (es. vecchie versioni SQLite)
+            ordine_id = conn.execute(text("SELECT last_insert_rowid()")).fetchone()[0]
 
-# ==================== ADMIN CON CACHING FIXATO ====================
+        # 2. Inserisci dettagli
+        for item in carrello:
+            conn.execute(text("""INSERT INTO ordini_dettagli (ordine_id, carta_id, quantita, prezzo)
+                         VALUES (:ordine_id, :carta_id, :quantita, :prezzo)"""),
+                      {
+                          'ordine_id': ordine_id,
+                          'carta_id': item['id'],
+                          'quantita': item['quantita'],
+                          'prezzo': item['prezzo']
+                      })
+            
+            # 3. Aggiorna quantità e stato venduto
+            conn.execute(text("""UPDATE carte 
+                         SET quantita = quantita - :qta,
+                             sold = CASE WHEN quantita - :qta <= 0 THEN 1 ELSE 0 END
+                         WHERE id = :id"""),
+                      {'qta': item['quantita'], 'id': item['id']})
+        
+        conn.commit()
+        return ordine_id
+    except Exception as e:
+        conn.rollback()
+        st.error(f"Errore creazione ordine: {e}")
+        return None
+    finally:
+        conn.close()
+        get_carte_cached.clear()
+
+# ==================== ADMIN ====================
 @st.cache_data(ttl=60)
 def get_stats():
     conn = get_connection()
@@ -607,7 +630,7 @@ def get_stats():
 def get_all_users():
     conn = get_connection()
     result = conn.execute(text("SELECT * FROM users ORDER BY created_at DESC"))
-    # FIX: Converti righe SQLAlchemy in tuple
+    # FIX IMPORTANTE
     users = [tuple(row) for row in result.fetchall()]
     conn.close()
     return users
@@ -636,7 +659,7 @@ def get_all_carte_admin():
                          FROM carte c 
                          JOIN users u ON c.user_id = u.id 
                          ORDER BY c.created_at DESC"""))
-    # FIX: Converti righe SQLAlchemy in tuple
+    # FIX IMPORTANTE
     carte = [tuple(row) for row in result.fetchall()]
     conn.close()
     return carte
@@ -649,7 +672,8 @@ def create_stripe_payment(amount):
     """
     try:
         import stripe
-        stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY", "sk_test_...")
+        # Usa chiave di test di default se non presente in secrets
+        stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY", "sk_test_4eC39HqLyjWDarjtT1zdp7dc")
         
         # Crea payment intent
         intent = stripe.PaymentIntent.create(
@@ -660,7 +684,8 @@ def create_stripe_payment(amount):
         
         return intent.id, intent.client_secret
     except Exception as e:
-        # st.error(f"Errore Stripe: {e}") # Silenziato per demo
+        # In produzione mostrare l'errore, in demo ritorniamo None
+        print(f"Errore Stripe: {e}")
         return None, None
 
 # ==================== SESSION STATE ====================
@@ -669,7 +694,7 @@ if 'logged_in' not in st.session_state:
     st.session_state.user = None
     st.session_state.page = 'marketplace'
     st.session_state.carrello = []
-    st.session_state.processing = False  # Per evitare doppi submit
+    st.session_state.processing = False
 
 # ==================== INIT DB ====================
 init_db()
@@ -689,6 +714,9 @@ if 'verify' in query_params:
 # ==================== SIDEBAR MENU ====================
 if st.session_state.logged_in:
     with st.sidebar:
+        # Usiamo user[2] (username) e user[14] (rating)
+        # Nota: assicurati che gli indici corrispondano alla tabella.
+        # id=0, email=1, username=2, ..., rating=14
         st.markdown(f"### 👤 @{st.session_state.user[2]}")
         st.caption(f"⭐ {st.session_state.user[14]:.1f}")
         
@@ -857,6 +885,7 @@ if not st.session_state.logged_in:
                         st.session_state.processing = False
                         if success:
                             st.success(message)
+                            # Pulisci form
                             for key in list(st.session_state.keys()):
                                 if key.startswith('reg_'):
                                     del st.session_state[key]
@@ -1089,11 +1118,14 @@ elif st.session_state.logged_in:
                                 indirizzo,
                                 intent_id
                             )
-                            st.session_state.processing = False
-                            st.success(f"🎉 Ordine #{ordine_id} creato!")
-                            st.session_state.carrello = []
-                            time.sleep(2)
-                            st.rerun()
+                            if ordine_id:
+                                st.session_state.processing = False
+                                st.success(f"🎉 Ordine #{ordine_id} creato!")
+                                st.session_state.carrello = []
+                                time.sleep(2)
+                                st.rerun()
+                            else:
+                                st.session_state.processing = False
                         else:
                             st.session_state.processing = False
                             st.error("Errore pagamento Stripe")
@@ -1108,11 +1140,14 @@ elif st.session_state.logged_in:
                             metodo,
                             indirizzo
                         )
-                        st.session_state.processing = False
-                        st.success(f"🎉 Ordine #{ordine_id} creato!")
-                        st.session_state.carrello = []
-                        time.sleep(2)
-                        st.rerun()
+                        if ordine_id:
+                            st.session_state.processing = False
+                            st.success(f"🎉 Ordine #{ordine_id} creato!")
+                            st.session_state.carrello = []
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.session_state.processing = False
     
     # ==================== MARKETPLACE ====================
     else:
