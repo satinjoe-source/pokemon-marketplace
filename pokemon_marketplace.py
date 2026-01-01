@@ -35,14 +35,12 @@ def load_css():
         --text-light: #24292f;
     }
 
-    /* TEMA SCURO (default) */
     :root {
         --bg: var(--dark-bg);
         --card: var(--dark-card);
         --text: var(--text-dark);
     }
 
-    /* TEMA CHIARO LEGGIBILE */
     @media (prefers-color-scheme: light) {
         :root {
             --bg: #f0f4ff;
@@ -56,86 +54,61 @@ def load_css():
         }
     }
 
-    /* ANIMAZIONI */
-    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-    @keyframes slideIn { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes neon { 0%, 100% { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor; } 50% { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; } }
+    @keyframes float { 
+        0%, 100% { transform: translateY(0); } 
+        50% { transform: translateY(-15px); } 
+    }
+    @keyframes pulse { 
+        0%, 100% { opacity: 1; } 
+        50% { opacity: 0.6; } 
+    }
+    @keyframes slideIn { 
+        from { opacity: 0; transform: translateY(30px); } 
+        to { opacity: 1; transform: translateY(0); } 
+    }
 
-    /* BACKGROUND CON PATTERN POKEMON */
     .stApp {
         background: var(--bg);
         color: var(--text);
         font-family: 'Poppins', sans-serif;
-        position: relative;
-    }
-    .stApp::before {
-        content: '';
-        position: fixed;
-        top: 0; left: 0;
-        width: 100%; height: 100%;
-        background-image: 
-            radial-gradient(circle at 20% 30%, rgba(0, 255, 65, 0.08) 0%, transparent 50%),
-            radial-gradient(circle at 80% 70%, rgba(255, 0, 110, 0.08) 0%, transparent 50%),
-            radial-gradient(circle at 50% 50%, rgba(131, 56, 236, 0.05) 0%, transparent 70%);
-        pointer-events: none;
-        z-index: 0;
     }
 
-    /* POKEMON DECORATIVI FISSI */
+    /* POKEMON LATERALI */
     .pokemon-deco {
         position: fixed;
         pointer-events: none;
         z-index: 1;
-        opacity: 0.3;
+        opacity: 0.25;
         animation: float 4s ease-in-out infinite;
     }
-    .poke-1 { top: 10%; left: 5%; width: 80px; }
-    .poke-2 { top: 60%; right: 5%; width: 100px; animation-delay: 1s; }
-    .poke-3 { bottom: 10%; left: 10%; width: 70px; animation-delay: 2s; }
+    .poke-1 { top: 10%; left: 2%; width: 80px; }
+    .poke-2 { top: 60%; right: 2%; width: 100px; animation-delay: 1s; }
 
-    /* TITOLI NEON */
     h1, h2, h3 {
         font-family: 'Poppins', sans-serif !important;
         font-weight: 800 !important;
         background: linear-gradient(135deg, var(--cyber-pink), var(--cyber-purple), var(--cyber-blue));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        animation: neon 3s ease-in-out infinite;
         letter-spacing: 1px;
     }
 
-    /* TOP BAR CON HOME/LOGOUT */
-    .top-bar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        background: rgba(13, 17, 23, 0.95);
-        backdrop-filter: blur(20px);
-        padding: 0.8rem 2rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        z-index: 1000;
-        border-bottom: 2px solid var(--cyber-pink);
-        box-shadow: 0 4px 20px rgba(255, 0, 110, 0.3);
-    }
     .top-bar-title {
         font-family: 'Press Start 2P', cursive;
         font-size: 1.2rem;
         background: linear-gradient(90deg, var(--cyber-yellow), var(--cyber-pink));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        text-align: center;
+        margin: 1rem 0;
     }
+
     .main-content {
-        margin-top: 80px;
+        margin-top: 20px;
         position: relative;
         z-index: 2;
     }
 
-    /* NAVBAR */
     .nav-container {
         background: rgba(22, 27, 34, 0.9);
         backdrop-filter: blur(15px);
@@ -149,58 +122,38 @@ def load_css():
         animation: slideIn 0.6s ease-out;
     }
 
-    /* CARD 3D */
     .product-card {
         background: var(--card);
         border: 3px solid transparent;
         border-image: linear-gradient(135deg, var(--cyber-pink), var(--cyber-blue)) 1;
         border-radius: 15px;
         padding: 1.2rem;
-        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        transition: all 0.3s;
         box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
         animation: slideIn 0.5s ease-out;
-        position: relative;
-        overflow: hidden;
-    }
-    .product-card::before {
-        content: '';
-        position: absolute;
-        top: -50%; left: -50%;
-        width: 200%; height: 200%;
-        background: linear-gradient(45deg, transparent, rgba(255, 0, 110, 0.1), transparent);
-        transform: rotate(45deg);
-        transition: all 0.5s;
-    }
-    .product-card:hover::before {
-        left: 100%;
+        margin-bottom: 1rem;
     }
     .product-card:hover {
         transform: translateY(-10px) scale(1.03);
         box-shadow: 0 20px 50px rgba(255, 0, 110, 0.4);
-        border-image: linear-gradient(135deg, var(--cyber-yellow), var(--cyber-pink)) 1;
     }
     .product-card img {
         border-radius: 10px;
         transition: transform 0.4s;
-        filter: drop-shadow(0 0 15px rgba(131, 56, 236, 0.4));
     }
     .product-card:hover img {
-        transform: scale(1.1) rotate(-5deg);
+        transform: scale(1.1);
     }
 
-    /* PRICE TAG ENERGETICO */
     .price-tag {
         font-size: 2rem;
         font-weight: 900;
         background: linear-gradient(135deg, var(--cyber-yellow), var(--cyber-pink));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 0 20px rgba(255, 190, 11, 0.6);
         margin: 1rem 0;
-        animation: pulse 2s ease-in-out infinite;
     }
 
-    /* BADGE RARITÀ VIVACI */
     .rarity-badge {
         display: inline-block;
         padding: 0.5rem 1rem;
@@ -217,7 +170,6 @@ def load_css():
     .rarity-secret { background: linear-gradient(135deg, var(--cyber-yellow), #ff6b00); color: black; }
     .rarity-rara { background: linear-gradient(135deg, var(--cyber-blue), var(--cyber-green)); color: white; }
 
-    /* HEADER PAGINA */
     .page-header {
         text-align: center;
         padding: 2rem;
@@ -233,7 +185,6 @@ def load_css():
     .page-header p { color: var(--text); font-size: 1.2rem; margin-top: 1rem; opacity: 0.8; }
     .page-header img { animation: float 3s ease-in-out infinite; }
 
-    /* BUTTONS ENERGETICI */
     .stButton > button {
         background: linear-gradient(135deg, var(--cyber-pink), var(--cyber-purple)) !important;
         color: white !important;
@@ -250,12 +201,7 @@ def load_css():
         transform: scale(1.05) !important;
         box-shadow: 0 10px 40px rgba(255, 0, 110, 0.6) !important;
     }
-    .stButton > button:disabled {
-        opacity: 0.5 !important;
-        cursor: not-allowed !important;
-    }
 
-    /* INPUTS MODERNI */
     .stTextInput input, .stNumberInput input, .stSelectbox select, .stTextArea textarea {
         background: var(--card) !important;
         border: 2px solid var(--cyber-purple) !important;
@@ -269,24 +215,13 @@ def load_css():
         box-shadow: 0 0 20px rgba(255, 0, 110, 0.3) !important;
     }
 
-    /* FILE UPLOADER CON CAMERA */
-    .stFileUploader {
-        background: var(--card);
-        border: 2px dashed var(--cyber-blue);
-        border-radius: 15px;
-        padding: 1.5rem;
-    }
-
-    /* RESPONSIVE */
     @media (max-width: 768px) {
-        .top-bar-title { font-size: 0.8rem; }
         .page-header h1 { font-size: 2rem; }
         .product-card { padding: 1rem; }
         .price-tag { font-size: 1.5rem; }
-        .pokemon-deco { display: none; }
+        .pokemon-deco { width: 60px !important; }
     }
 
-    /* NASCONDI ELEMENTI STREAMLIT */
     [data-testid="stHeader"], footer, header, .viewerBadge_container__r5tak { 
         visibility: hidden !important; 
         height: 0 !important;
@@ -310,12 +245,10 @@ def get_engine():
 def get_conn():
     return get_engine().connect()
 
-# ==================== UTILS ====================
 def to_dict_list(result):
     return [dict(row._mapping) for row in result.fetchall()]
 
 def get_image_b64(img_data):
-    """Fix immagini - gestisce bytes, memoryview, ecc."""
     if not img_data:
         return None
     try:
@@ -324,8 +257,7 @@ def get_image_b64(img_data):
         if isinstance(img_data, bytes):
             return base64.b64encode(img_data).decode('utf-8')
         return None
-    except Exception as e:
-        st.error(f"Errore immagine: {e}")
+    except:
         return None
 
 def safe_date(d):
@@ -359,7 +291,6 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )'''))
         
-        # AGGIUNTO CAMPO DESCRIZIONE
         conn.execute(text('''
         CREATE TABLE IF NOT EXISTS carte (
             id SERIAL PRIMARY KEY,
@@ -396,73 +327,65 @@ if "logged_in" not in st.session_state:
     st.session_state.carrello = []
     st.session_state.processing = False
 
-# ==================== POKEMON DECORATIVI ====================
+# ==================== POKEMON LATERALI ====================
 st.markdown("""
 <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" class="pokemon-deco poke-1">
 <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/6.png" class="pokemon-deco poke-2">
-<img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/150.png" class="pokemon-deco poke-3">
 """, unsafe_allow_html=True)
 
-# ==================== TOP BAR CON HOME/LOGOUT ====================
-def render_topbar():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col1:
-        if st.button("🏠 HOME", key="top_home", use_container_width=True):
-            st.session_state.menu = "Market" if st.session_state.logged_in else "Login"
-            st.rerun()
-    
-    with col2:
-        st.markdown('<div class="top-bar-title">⚡ POKEMON PORTAL</div>', unsafe_allow_html=True)
-    
-    with col3:
-        if st.session_state.logged_in:
-            if st.button("🚪 LOGOUT", key="top_logout", use_container_width=True):
-                st.session_state.logged_in = False
-                st.session_state.user = None
-                st.session_state.carrello = []
-                st.session_state.menu = "Login"
-                st.rerun()
+# ==================== TOP BAR ====================
+col1, col2, col3 = st.columns([1, 2, 1])
 
-render_topbar()
+with col1:
+    if st.button("🏠 HOME", key="top_home", use_container_width=True):
+        st.session_state.menu = "Market" if st.session_state.logged_in else "Login"
+        st.rerun()
+
+with col2:
+    st.markdown('<div class="top-bar-title">⚡ POKEMON PORTAL</div>', unsafe_allow_html=True)
+
+with col3:
+    if st.session_state.logged_in:
+        if st.button("🚪 LOGOUT", key="top_logout", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.user = None
+            st.session_state.carrello = []
+            st.session_state.menu = "Login"
+            st.rerun()
 
 st.markdown('<div class="main-content">', unsafe_allow_html=True)
 
 # ==================== NAVBAR ====================
-def render_nav():
-    st.markdown('<div class="nav-container">', unsafe_allow_html=True)
-    
-    if st.session_state.logged_in:
-        nav_cols = st.columns(4)
-        if nav_cols[0].button("🏪 Marketplace", key="nav_mkt", use_container_width=True):
-            st.session_state.menu = "Market"
-            st.rerun()
-        if nav_cols[1].button("💎 Vendi", key="nav_vendi", use_container_width=True):
-            st.session_state.menu = "Vendi"
-            st.rerun()
-        cart_count = len(st.session_state.carrello)
-        if nav_cols[2].button(f"🛒 Carrello ({cart_count})", key="nav_cart", use_container_width=True):
-            st.session_state.menu = "Carrello"
-            st.rerun()
-        if nav_cols[3].button("👤 Profilo", key="nav_prof", use_container_width=True):
-            st.session_state.menu = "Profilo"
-            st.rerun()
-    else:
-        nav_cols = st.columns(2)
-        if nav_cols[0].button("🔑 Login", key="nav_login", use_container_width=True):
-            st.session_state.menu = "Login"
-            st.rerun()
-        if nav_cols[1].button("📝 Registrati", key="nav_reg", use_container_width=True):
-            st.session_state.menu = "Registrazione"
-            st.rerun()
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('<div class="nav-container">', unsafe_allow_html=True)
 
-render_nav()
+if st.session_state.logged_in:
+    nav_cols = st.columns(4)
+    if nav_cols[0].button("🏪 Marketplace", key="nav_mkt", use_container_width=True):
+        st.session_state.menu = "Market"
+        st.rerun()
+    if nav_cols[1].button("💎 Vendi", key="nav_vendi", use_container_width=True):
+        st.session_state.menu = "Vendi"
+        st.rerun()
+    cart_count = len(st.session_state.carrello)
+    if nav_cols[2].button(f"🛒 Carrello ({cart_count})", key="nav_cart", use_container_width=True):
+        st.session_state.menu = "Carrello"
+        st.rerun()
+    if nav_cols[3].button("👤 Profilo", key="nav_prof", use_container_width=True):
+        st.session_state.menu = "Profilo"
+        st.rerun()
+else:
+    nav_cols = st.columns(2)
+    if nav_cols[0].button("🔑 Login", key="nav_login", use_container_width=True):
+        st.session_state.menu = "Login"
+        st.rerun()
+    if nav_cols[1].button("📝 Registrati", key="nav_reg", use_container_width=True):
+        st.session_state.menu = "Registrazione"
+        st.rerun()
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 # ==================== PAGINE ====================
 if not st.session_state.logged_in:
-    # --- REGISTRAZIONE ---
     if st.session_state.menu == "Registrazione":
         st.markdown("""
         <div class="page-header">
@@ -510,7 +433,6 @@ if not st.session_state.logged_in:
                         st.session_state.processing = False
                         st.error("❌ Email/username già in uso")
 
-    # --- LOGIN ---
     else:
         st.markdown("""
         <div class="page-header">
@@ -549,9 +471,7 @@ if not st.session_state.logged_in:
                         st.session_state.processing = False
                         st.error("❌ Credenziali errate")
 
-# ==================== LOGGATO ====================
 else:
-    # --- MARKET ---
     if st.session_state.menu == "Market":
         st.markdown("""
         <div class="page-header">
@@ -624,7 +544,6 @@ else:
                     
                     st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- VENDI ---
     elif st.session_state.menu == "Vendi":
         st.markdown("""
         <div class="page-header">
@@ -637,12 +556,7 @@ else:
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                # CAMERA MOBILE FIX
-                img = st.file_uploader(
-                    "📸 Foto Carta*",
-                    type=["png", "jpg", "jpeg"],
-                    help="Su smartphone: tocca per scattare foto"
-                )
+                img = st.file_uploader("📸 Foto Carta*", type=["png", "jpg", "jpeg"])
                 if img:
                     st.image(img, use_container_width=True)
             
@@ -650,16 +564,7 @@ else:
                 nome = st.text_input("🎴 Nome Carta*", placeholder="Pikachu VMAX")
                 rarita = st.selectbox("⭐ Rarità*", ["Holo", "Ultra Rara", "Secret", "Rara"])
                 prezzo = st.number_input("💰 Prezzo €*", min_value=0.5, step=0.5, value=10.0)
-                descrizione = st.text_area("📝 Descrizione / Difetti", placeholder="Es: Carta in condizioni NM, piccola piega angolo...")
-                
-                st.markdown("""
-                <div style='background: rgba(131, 56, 236, 0.15); padding: 1rem; border-radius: 10px; margin-top: 1rem; border-left: 3px solid var(--cyber-purple);'>
-                    <strong>💡 Consigli:</strong><br>
-                    • Scatta foto nitide e ben illuminate<br>
-                    • Controlla i prezzi di mercato<br>
-                    • Descrivi accuratamente le condizioni
-                </div>
-                """, unsafe_allow_html=True)
+                descrizione = st.text_area("📝 Descrizione / Difetti", placeholder="Condizioni, difetti...")
             
             submitted = st.form_submit_button("🚀 PUBBLICA", use_container_width=True, disabled=st.session_state.processing)
             
@@ -693,7 +598,6 @@ else:
                         st.session_state.processing = False
                         st.error(f"❌ Errore: {e}")
 
-    # --- CARRELLO ---
     elif st.session_state.menu == "Carrello":
         st.markdown("""
         <div class="page-header">
@@ -704,7 +608,7 @@ else:
         
         if not st.session_state.carrello:
             st.markdown("""
-            <div style='text-align: center; padding: 4rem; background: rgba(22, 27, 34, 0.8); border-radius: 20px; border: 2px dashed var(--cyber-blue);'>
+            <div style='text-align: center; padding: 4rem; background: rgba(22, 27, 34, 0.8); border-radius: 20px;'>
                 <h2 style='opacity: 0.6;'>🛒 Carrello vuoto</h2>
                 <p style='opacity: 0.6;'>Vai al marketplace!</p>
             </div>
@@ -727,7 +631,6 @@ else:
             st.divider()
             st.markdown(f"<h2 style='text-align: right;'>Totale: <span class='price-tag'>€{totale:.2f}</span></h2>", unsafe_allow_html=True)
             
-            st.markdown("### 💳 Checkout")
             if st.button("✅ CONFERMA ORDINE", use_container_width=True, type="primary", disabled=st.session_state.processing):
                 st.session_state.processing = True
                 with st.spinner("Elaborazione..."):
@@ -739,7 +642,6 @@ else:
                     time.sleep(2)
                     st.rerun()
 
-    # --- PROFILO ---
     elif st.session_state.menu == "Profilo":
         user = st.session_state.user
         
