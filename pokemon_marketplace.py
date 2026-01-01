@@ -119,7 +119,8 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-def send_verification_email(to_email, username, token):
+
+def send_verification_email(to_email, token, username):
     from_email = st.secrets["EMAIL_USER"]
     password = st.secrets["EMAIL_PASSWORD"]
     
@@ -212,6 +213,7 @@ Il tuo marketplace di carte Pokemon
     except Exception as e:
         st.error(f"Errore invio email: {e}")
         return False
+
 def register_user(email, username, password, nome, cognome, indirizzo, citta, cap, provincia, telefono):
     conn = get_connection()
     try:
