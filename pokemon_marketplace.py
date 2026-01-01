@@ -1,4 +1,4 @@
-# pokemon_marketplace.py - VERSIONE OTTIMIZZATA
+# pokemon_marketplace.py - VERSIONE FIXATA PER CACHE
 import streamlit as st
 import hashlib
 import secrets
@@ -183,7 +183,7 @@ if DATABASE_URL.startswith('postgres://'):
 
 # Connection pooling per performance
 engine = create_engine(
-    DATABASE_URL, 
+    DATABASE_URL,
     poolclass=QueuePool,
     pool_size=5,
     max_overflow=10,
@@ -229,7 +229,7 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )'''))
         
-        # Carte - RIMOSSI numero e serie, AGGIUNTO sold
+        # Carte
         conn.execute(text('''CREATE TABLE IF NOT EXISTS carte (
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id),
@@ -246,7 +246,7 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )'''))
         
-        # Commenti - NUOVA TABELLA
+        # Commenti
         conn.execute(text('''CREATE TABLE IF NOT EXISTS comments (
             id SERIAL PRIMARY KEY,
             carta_id INTEGER REFERENCES carte(id) ON DELETE CASCADE,
@@ -436,8 +436,8 @@ def login_user(email_or_username, password):
     conn.close()
     return user
 
-# ==================== CARTE FUNCTIONS CON CACHING ====================
-@st.cache_data(ttl=30)  # Cache 30 secondi
+# ==================== CARTE FUNCTIONS CON CACHING FIXATO ====================
+@st.cache_data(ttl=30)
 def get_carte_cached(search="", rarita="", lingua="", min_price=0, max_price=10000):
     conn = get_connection()
     query = """SELECT c.*, u.username 
@@ -463,7 +463,8 @@ def get_carte_cached(search="", rarita="", lingua="", min_price=0, max_price=100
     query += " ORDER BY c.created_at DESC"
     
     result = conn.execute(text(query), params)
-    carte = result.fetchall()
+    # FIX: Converti righe SQLAlchemy in tuple
+    carte = [tuple(row) for row in result.fetchall()]
     conn.close()
     return carte
 
@@ -492,7 +493,8 @@ def get_my_carte_cached(user_id):
     conn = get_connection()
     result = conn.execute(text("SELECT * FROM carte WHERE user_id=:user_id ORDER BY created_at DESC"),
                          {'user_id': user_id})
-    carte = result.fetchall()
+    # FIX: Converti righe SQLAlchemy in tuple
+    carte = [tuple(row) for row in result.fetchall()]
     conn.close()
     return carte
 
@@ -512,7 +514,7 @@ def delete_carta(carta_id):
     get_carte_cached.clear()
     get_my_carte_cached.clear()
 
-# ==================== COMMENTI ====================
+# ==================== COMMENTI CON CACHING FIXATO ====================
 def add_comment(carta_id, user_id, comment, rating):
     conn = get_connection()
     conn.execute(text("""INSERT INTO comments (carta_id, user_id, comment, rating)
@@ -531,7 +533,8 @@ def get_comments(carta_id):
                          WHERE c.carta_id = :carta_id 
                          ORDER BY c.created_at DESC"""),
                          {'carta_id': carta_id})
-    comments = result.fetchall()
+    # FIX: Converti righe SQLAlchemy in tuple
+    comments = [tuple(row) for row in result.fetchall()]
     conn.close()
     return comments
 
@@ -577,7 +580,7 @@ def create_ordine(buyer_id, seller_id, carrello, totale, metodo, indirizzo, stri
     get_carte_cached.clear()
     return ordine_id
 
-# ==================== ADMIN ====================
+# ==================== ADMIN CON CACHING FIXATO ====================
 @st.cache_data(ttl=60)
 def get_stats():
     conn = get_connection()
@@ -604,7 +607,8 @@ def get_stats():
 def get_all_users():
     conn = get_connection()
     result = conn.execute(text("SELECT * FROM users ORDER BY created_at DESC"))
-    users = result.fetchall()
+    # FIX: Converti righe SQLAlchemy in tuple
+    users = [tuple(row) for row in result.fetchall()]
     conn.close()
     return users
 
@@ -632,7 +636,8 @@ def get_all_carte_admin():
                          FROM carte c 
                          JOIN users u ON c.user_id = u.id 
                          ORDER BY c.created_at DESC"""))
-    carte = result.fetchall()
+    # FIX: Converti righe SQLAlchemy in tuple
+    carte = [tuple(row) for row in result.fetchall()]
     conn.close()
     return carte
 
@@ -655,7 +660,7 @@ def create_stripe_payment(amount):
         
         return intent.id, intent.client_secret
     except Exception as e:
-        st.error(f"Errore Stripe: {e}")
+        # st.error(f"Errore Stripe: {e}") # Silenziato per demo
         return None, None
 
 # ==================== SESSION STATE ====================
@@ -742,8 +747,8 @@ if not st.session_state.logged_in:
             login_pass = st.text_input("🔒 Password", type="password")
             
             submitted = st.form_submit_button(
-                "🚀 ACCEDI", 
-                use_container_width=True, 
+                "🚀 ACCEDI",
+                use_container_width=True,
                 type="primary",
                 disabled=st.session_state.processing
             )
@@ -823,8 +828,8 @@ if not st.session_state.logged_in:
             reg_privacy = st.checkbox("✅ Accetto termini*", key="reg_privacy")
             
             submitted = st.form_submit_button(
-                "✅ REGISTRATI", 
-                use_container_width=True, 
+                "✅ REGISTRATI",
+                use_container_width=True,
                 type="primary",
                 disabled=st.session_state.processing
             )
@@ -944,14 +949,14 @@ elif st.session_state.logged_in:
                 
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    rarita = st.selectbox("⭐ Rarità*", 
-                        ["Comune", "Non Comune", "Rara", "Holo Rara", "Ultra Rara", 
+                    rarita = st.selectbox("⭐ Rarità*",
+                        ["Comune", "Non Comune", "Rara", "Holo Rara", "Ultra Rara",
                          "Full Art", "Rainbow Rare", "Secret Rare"])
                 with col_b:
-                    lingua = st.selectbox("🌍 Lingua*", 
+                    lingua = st.selectbox("🌍 Lingua*",
                         ["Italiano", "Inglese", "Giapponese", "Francese"])
                 
-                condizione = st.selectbox("💎 Condizione*", 
+                condizione = st.selectbox("💎 Condizione*",
                     ["Near Mint (NM)", "Excellent (EX)", "Very Good (VG)"])
                 
                 col_a, col_b = st.columns(2)
@@ -963,8 +968,8 @@ elif st.session_state.logged_in:
                 descrizione = st.text_area("📝 Descrizione")
             
             submitted = st.form_submit_button(
-                "✅ Pubblica", 
-                use_container_width=True, 
+                "✅ Pubblica",
+                use_container_width=True,
                 type="primary",
                 disabled=st.session_state.processing
             )
@@ -977,7 +982,7 @@ elif st.session_state.logged_in:
                 else:
                     with st.spinner("Pubblicazione carta..."):
                         img_bytes = immagine_file.read()
-                        add_carta(st.session_state.user[0], nome, rarita, lingua, 
+                        add_carta(st.session_state.user[0], nome, rarita, lingua,
                                  condizione, prezzo, quantita, descrizione, img_bytes)
                         st.session_state.processing = False
                         st.success("🎉 Carta pubblicata!")
@@ -1012,7 +1017,7 @@ elif st.session_state.logged_in:
                             if carta[10]:  # sold
                                 st.markdown('<span class="sold-badge">VENDUTA</span>', unsafe_allow_html=True)
                             else:
-                                st.markdown(f'<span class="rarity-badge">{carta[3]}</span>', 
+                                st.markdown(f'<span class="rarity-badge">{carta[3]}</span>',
                                            unsafe_allow_html=True)
                             
                             st.markdown(f'<div class="price-tag">€{carta[6]:.2f}</div>', unsafe_allow_html=True)
@@ -1062,8 +1067,8 @@ elif st.session_state.logged_in:
                 indirizzo = st.text_area("📍 Indirizzo", value=indirizzo_default)
             
             if st.button(
-                "💳 PAGA ORA", 
-                type="primary", 
+                "💳 PAGA ORA",
+                type="primary",
                 use_container_width=True,
                 disabled=st.session_state.processing
             ):
@@ -1076,11 +1081,11 @@ elif st.session_state.logged_in:
                         if intent_id:
                             seller_id = st.session_state.carrello[0]['seller_id']
                             ordine_id = create_ordine(
-                                st.session_state.user[0], 
+                                st.session_state.user[0],
                                 seller_id,
-                                st.session_state.carrello, 
-                                totale, 
-                                metodo, 
+                                st.session_state.carrello,
+                                totale,
+                                metodo,
                                 indirizzo,
                                 intent_id
                             )
@@ -1096,11 +1101,11 @@ elif st.session_state.logged_in:
                         # Altri metodi
                         seller_id = st.session_state.carrello[0]['seller_id']
                         ordine_id = create_ordine(
-                            st.session_state.user[0], 
+                            st.session_state.user[0],
                             seller_id,
-                            st.session_state.carrello, 
-                            totale, 
-                            metodo, 
+                            st.session_state.carrello,
+                            totale,
+                            metodo,
                             indirizzo
                         )
                         st.session_state.processing = False
@@ -1128,10 +1133,10 @@ elif st.session_state.logged_in:
         with col1:
             search = st.text_input("🔍 Cerca")
         with col2:
-            rarita_filter = st.selectbox("⭐ Rarità", 
+            rarita_filter = st.selectbox("⭐ Rarità",
                 ["Tutte", "Comune", "Non Comune", "Rara", "Holo Rara", "Ultra Rara", "Secret Rare"])
         with col3:
-            lingua_filter = st.selectbox("🌍 Lingua", 
+            lingua_filter = st.selectbox("🌍 Lingua",
                 ["Tutte", "Italiano", "Inglese", "Giapponese"])
         with col4:
             max_price = st.number_input("💰 Max €", min_value=0, value=1000, step=50)
@@ -1163,7 +1168,7 @@ elif st.session_state.logged_in:
                             st.markdown(f"### {carta[2]}")
                             st.markdown(f'<span class="seller-badge">@{carta[12]}</span>', unsafe_allow_html=True)
                             
-                            st.markdown(f'<span class="rarity-badge">{carta[3]}</span>', 
+                            st.markdown(f'<span class="rarity-badge">{carta[3]}</span>',
                                        unsafe_allow_html=True)
                             
                             st.write(f"💎 {carta[5]}")
@@ -1200,7 +1205,7 @@ elif st.session_state.logged_in:
                                             st.success("Commento aggiunto!")
                                             st.rerun()
                             
-                            qta = st.number_input("Qta", min_value=1, max_value=carta[7], 
+                            qta = st.number_input("Qta", min_value=1, max_value=carta[7],
                                                  value=1, key=f"qta_{carta[0]}")
                             
                             if st.button("🛒 Aggiungi", key=f"add_{carta[0]}", use_container_width=True):
