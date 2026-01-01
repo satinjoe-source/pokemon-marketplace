@@ -183,7 +183,7 @@ if DATABASE_URL.startswith('postgres://'):
 
 # Connection pooling per performance
 engine = create_engine(
-    DATABASE_URL,
+    DATABASE_URL, 
     poolclass=QueuePool,
     pool_size=5,
     max_overflow=10,
@@ -742,8 +742,8 @@ if not st.session_state.logged_in:
             login_pass = st.text_input("🔒 Password", type="password")
             
             submitted = st.form_submit_button(
-                "🚀 ACCEDI",
-                use_container_width=True,
+                "🚀 ACCEDI", 
+                use_container_width=True, 
                 type="primary",
                 disabled=st.session_state.processing
             )
@@ -823,8 +823,8 @@ if not st.session_state.logged_in:
             reg_privacy = st.checkbox("✅ Accetto termini*", key="reg_privacy")
             
             submitted = st.form_submit_button(
-                "✅ REGISTRATI",
-                use_container_width=True,
+                "✅ REGISTRATI", 
+                use_container_width=True, 
                 type="primary",
                 disabled=st.session_state.processing
             )
@@ -944,14 +944,14 @@ elif st.session_state.logged_in:
                 
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    rarita = st.selectbox("⭐ Rarità*",
-                        ["Comune", "Non Comune", "Rara", "Holo Rara", "Ultra Rara",
+                    rarita = st.selectbox("⭐ Rarità*", 
+                        ["Comune", "Non Comune", "Rara", "Holo Rara", "Ultra Rara", 
                          "Full Art", "Rainbow Rare", "Secret Rare"])
                 with col_b:
-                    lingua = st.selectbox("🌍 Lingua*",
+                    lingua = st.selectbox("🌍 Lingua*", 
                         ["Italiano", "Inglese", "Giapponese", "Francese"])
                 
-                condizione = st.selectbox("💎 Condizione*",
+                condizione = st.selectbox("💎 Condizione*", 
                     ["Near Mint (NM)", "Excellent (EX)", "Very Good (VG)"])
                 
                 col_a, col_b = st.columns(2)
@@ -963,8 +963,8 @@ elif st.session_state.logged_in:
                 descrizione = st.text_area("📝 Descrizione")
             
             submitted = st.form_submit_button(
-                "✅ Pubblica",
-                use_container_width=True,
+                "✅ Pubblica", 
+                use_container_width=True, 
                 type="primary",
                 disabled=st.session_state.processing
             )
@@ -977,7 +977,7 @@ elif st.session_state.logged_in:
                 else:
                     with st.spinner("Pubblicazione carta..."):
                         img_bytes = immagine_file.read()
-                        add_carta(st.session_state.user[0], nome, rarita, lingua,
+                        add_carta(st.session_state.user[0], nome, rarita, lingua, 
                                  condizione, prezzo, quantita, descrizione, img_bytes)
                         st.session_state.processing = False
                         st.success("🎉 Carta pubblicata!")
@@ -1012,7 +1012,7 @@ elif st.session_state.logged_in:
                             if carta[10]:  # sold
                                 st.markdown('<span class="sold-badge">VENDUTA</span>', unsafe_allow_html=True)
                             else:
-                                st.markdown(f'<span class="rarity-badge">{carta[3]}</span>',
+                                st.markdown(f'<span class="rarity-badge">{carta[3]}</span>', 
                                            unsafe_allow_html=True)
                             
                             st.markdown(f'<div class="price-tag">€{carta[6]:.2f}</div>', unsafe_allow_html=True)
@@ -1062,8 +1062,8 @@ elif st.session_state.logged_in:
                 indirizzo = st.text_area("📍 Indirizzo", value=indirizzo_default)
             
             if st.button(
-                "💳 PAGA ORA",
-                type="primary",
+                "💳 PAGA ORA", 
+                type="primary", 
                 use_container_width=True,
                 disabled=st.session_state.processing
             ):
@@ -1076,11 +1076,11 @@ elif st.session_state.logged_in:
                         if intent_id:
                             seller_id = st.session_state.carrello[0]['seller_id']
                             ordine_id = create_ordine(
-                                st.session_state.user[0],
+                                st.session_state.user[0], 
                                 seller_id,
-                                st.session_state.carrello,
-                                totale,
-                                metodo,
+                                st.session_state.carrello, 
+                                totale, 
+                                metodo, 
                                 indirizzo,
                                 intent_id
                             )
@@ -1096,11 +1096,11 @@ elif st.session_state.logged_in:
                         # Altri metodi
                         seller_id = st.session_state.carrello[0]['seller_id']
                         ordine_id = create_ordine(
-                            st.session_state.user[0],
+                            st.session_state.user[0], 
                             seller_id,
-                            st.session_state.carrello,
-                            totale,
-                            metodo,
+                            st.session_state.carrello, 
+                            totale, 
+                            metodo, 
                             indirizzo
                         )
                         st.session_state.processing = False
@@ -1128,10 +1128,10 @@ elif st.session_state.logged_in:
         with col1:
             search = st.text_input("🔍 Cerca")
         with col2:
-            rarita_filter = st.selectbox("⭐ Rarità",
+            rarita_filter = st.selectbox("⭐ Rarità", 
                 ["Tutte", "Comune", "Non Comune", "Rara", "Holo Rara", "Ultra Rara", "Secret Rare"])
         with col3:
-            lingua_filter = st.selectbox("🌍 Lingua",
+            lingua_filter = st.selectbox("🌍 Lingua", 
                 ["Tutte", "Italiano", "Inglese", "Giapponese"])
         with col4:
             max_price = st.number_input("💰 Max €", min_value=0, value=1000, step=50)
@@ -1163,7 +1163,7 @@ elif st.session_state.logged_in:
                             st.markdown(f"### {carta[2]}")
                             st.markdown(f'<span class="seller-badge">@{carta[12]}</span>', unsafe_allow_html=True)
                             
-                            st.markdown(f'<span class="rarity-badge">{carta[3]}</span>',
+                            st.markdown(f'<span class="rarity-badge">{carta[3]}</span>', 
                                        unsafe_allow_html=True)
                             
                             st.write(f"💎 {carta[5]}")
@@ -1200,7 +1200,7 @@ elif st.session_state.logged_in:
                                             st.success("Commento aggiunto!")
                                             st.rerun()
                             
-                            qta = st.number_input("Qta", min_value=1, max_value=carta[7],
+                            qta = st.number_input("Qta", min_value=1, max_value=carta[7], 
                                                  value=1, key=f"qta_{carta[0]}")
                             
                             if st.button("🛒 Aggiungi", key=f"add_{carta[0]}", use_container_width=True):
@@ -1217,4 +1217,3 @@ elif st.session_state.logged_in:
                                 st.rerun()
                             
                             st.markdown('</div>', unsafe_allow_html=True)
-
