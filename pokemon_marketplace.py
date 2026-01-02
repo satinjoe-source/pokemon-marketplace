@@ -253,72 +253,82 @@ def get_rarity_class(rarita):
     }
     return mapping.get(rarita, "badge-rara")
 
-# ==================== INIT DB CON MIGRAZIONE ====================
+# ==================== INIT DB CON ROLLBACK ====================
 def init_db():
     conn = get_conn()
     try:
-        # Users base
-        conn.execute(text('''
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            email TEXT UNIQUE NOT NULL,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )'''))
-        conn.commit()
+        # 1. USERS TABLE
+        try:
+            conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )'''))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            st.warning(f"Users table già esiste")
         
-        # MIGRAZIONE: Aggiungi wallet_balance se non esiste
+        # 2. AGGIUNGI WALLET
         try:
             conn.execute(text("ALTER TABLE users ADD COLUMN wallet_balance REAL DEFAULT 0.0"))
             conn.commit()
-            st.info("✅ Colonna wallet_balance aggiunta!")
         except:
-            pass  # Colonna già esistente
+            conn.rollback()
+            pass  # Già esiste
         
-        # Carte
-        conn.execute(text('''
-        CREATE TABLE IF NOT EXISTS carte (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER,
-            nome TEXT NOT NULL,
-            rarita TEXT,
-            prezzo REAL NOT NULL,
-            descrizione TEXT,
-            immagine BYTEA,
-            sold INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )'''))
+        # 3. CARTE TABLE
+        try:
+            conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS carte (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER,
+                nome TEXT NOT NULL,
+                rarita TEXT,
+                prezzo REAL NOT NULL,
+                descrizione TEXT,
+                immagine BYTEA,
+                sold INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )'''))
+            conn.commit()
+        except:
+            conn.rollback()
         
-        # Transazioni
-        conn.execute(text('''
-        CREATE TABLE IF NOT EXISTS transactions (
-            id SERIAL PRIMARY KEY,
-            buyer_id INTEGER,
-            seller_id INTEGER,
-            carta_id INTEGER,
-            amount REAL NOT NULL,
-            tipo TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )'''))
-        
-        conn.commit()
+        # 4. TRANSACTIONS TABLE
+        try:
+            conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS transactions (
+                id SERIAL PRIMARY KEY,
+                buyer_id INTEGER,
+                seller_id INTEGER,
+                carta_id INTEGER,
+                amount REAL NOT NULL,
+                tipo TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )'''))
+            conn.commit()
+        except:
+            conn.rollback()
 
-        # Admin con wallet
-        result = conn.execute(text("SELECT * FROM users WHERE email = 'admin@pokemon.com'"))
-        if not result.fetchone():
-            pw = hashlib.sha256("admin123".encode()).hexdigest()
-            conn.execute(text("""
-                INSERT INTO users (email, username, password, wallet_balance, created_at)
-                VALUES ('admin@pokemon.com', 'admin', :pw, 1000.0, CURRENT_TIMESTAMP)
-            """), {"pw": pw})
-            conn.commit()
-        else:
-            # Assicurati che admin abbia wallet
-            conn.execute(text("UPDATE users SET wallet_balance = 1000.0 WHERE email = 'admin@pokemon.com' AND wallet_balance IS NULL"))
-            conn.commit()
+        # 5. ADMIN
+        try:
+            result = conn.execute(text("SELECT * FROM users WHERE email = 'admin@pokemon.com'"))
+            if not result.fetchone():
+                pw = hashlib.sha256("admin123".encode()).hexdigest()
+                conn.execute(text("""
+                    INSERT INTO users (email, username, password, wallet_balance, created_at)
+                    VALUES ('admin@pokemon.com', 'admin', :pw, 1000.0, CURRENT_TIMESTAMP)
+                """), {"pw": pw})
+                conn.commit()
+        except:
+            conn.rollback()
             
     except Exception as e:
+        conn.rollback()
         st.error(f"Errore DB: {e}")
     finally:
         conn.close()
@@ -328,65 +338,76 @@ init_db()
 # ==================== WALLET FUNCTIONS ====================
 def get_wallet_balance(user_id):
     conn = get_conn()
-    result = conn.execute(text("SELECT wallet_balance FROM users WHERE id = :id"), {"id": user_id})
-    balance = result.fetchone()
-    conn.close()
-    return float(balance[0]) if balance and balance[0] is not None else 0.0
+    try:
+        result = conn.execute(text("SELECT wallet_balance FROM users WHERE id = :id"), {"id": user_id})
+        balance = result.fetchone()
+        return float(balance[0]) if balance and balance[0] is not None else 0.0
+    except:
+        return 0.0
+    finally:
+        conn.close()
 
 def add_funds(user_id, amount):
     conn = get_conn()
-    conn.execute(text("UPDATE users SET wallet_balance = COALESCE(wallet_balance, 0) + :amount WHERE id = :id"),
-                 {"amount": amount, "id": user_id})
-    conn.execute(text("""INSERT INTO transactions (buyer_id, amount, tipo, created_at) 
-                 VALUES (:id, :amount, 'ricarica', CURRENT_TIMESTAMP)"""),
-                 {"id": user_id, "amount": amount})
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(text("UPDATE users SET wallet_balance = COALESCE(wallet_balance, 0) + :amount WHERE id = :id"),
+                     {"amount": amount, "id": user_id})
+        conn.execute(text("""INSERT INTO transactions (buyer_id, amount, tipo, created_at) 
+                     VALUES (:id, :amount, 'ricarica', CURRENT_TIMESTAMP)"""),
+                     {"id": user_id, "amount": amount})
+        conn.commit()
+    except:
+        conn.rollback()
+    finally:
+        conn.close()
 
 def withdraw_funds(user_id, amount):
     conn = get_conn()
-    balance = get_wallet_balance(user_id)
-    if balance >= amount:
-        conn.execute(text("UPDATE users SET wallet_balance = wallet_balance - :amount WHERE id = :id"),
-                     {"amount": amount, "id": user_id})
-        conn.execute(text("""INSERT INTO transactions (buyer_id, amount, tipo, created_at) 
-                     VALUES (:id, :amount, 'prelievo', CURRENT_TIMESTAMP)"""),
-                     {"id": user_id, "amount": amount})
-        conn.commit()
+    try:
+        balance = get_wallet_balance(user_id)
+        if balance >= amount:
+            conn.execute(text("UPDATE users SET wallet_balance = wallet_balance - :amount WHERE id = :id"),
+                         {"amount": amount, "id": user_id})
+            conn.execute(text("""INSERT INTO transactions (buyer_id, amount, tipo, created_at) 
+                         VALUES (:id, :amount, 'prelievo', CURRENT_TIMESTAMP)"""),
+                         {"id": user_id, "amount": amount})
+            conn.commit()
+            return True
+        return False
+    except:
+        conn.rollback()
+        return False
+    finally:
         conn.close()
-        return True
-    conn.close()
-    return False
 
 def process_purchase(buyer_id, seller_id, carta_id, amount):
     conn = get_conn()
-    buyer_balance = get_wallet_balance(buyer_id)
-    
-    if buyer_balance >= amount:
-        # Sottrai da buyer
-        conn.execute(text("UPDATE users SET wallet_balance = wallet_balance - :amount WHERE id = :buyer"),
-                     {"amount": amount, "buyer": buyer_id})
+    try:
+        buyer_balance = get_wallet_balance(buyer_id)
         
-        # Aggiungi a seller (95% - 5% commissione)
-        seller_amount = amount * 0.95
-        conn.execute(text("UPDATE users SET wallet_balance = COALESCE(wallet_balance, 0) + :amount WHERE id = :seller"),
-                     {"amount": seller_amount, "seller": seller_id})
-        
-        # Marca carta come venduta
-        conn.execute(text("UPDATE carte SET sold = 1 WHERE id = :id"), {"id": carta_id})
-        
-        # Registra transazione
-        conn.execute(text("""INSERT INTO transactions 
-                     (buyer_id, seller_id, carta_id, amount, tipo, created_at)
-                     VALUES (:buyer, :seller, :carta, :amount, 'acquisto', CURRENT_TIMESTAMP)"""),
-                     {"buyer": buyer_id, "seller": seller_id, "carta": carta_id, "amount": amount})
-        
-        conn.commit()
+        if buyer_balance >= amount:
+            conn.execute(text("UPDATE users SET wallet_balance = wallet_balance - :amount WHERE id = :buyer"),
+                         {"amount": amount, "buyer": buyer_id})
+            
+            seller_amount = amount * 0.95
+            conn.execute(text("UPDATE users SET wallet_balance = COALESCE(wallet_balance, 0) + :amount WHERE id = :seller"),
+                         {"amount": seller_amount, "seller": seller_id})
+            
+            conn.execute(text("UPDATE carte SET sold = 1 WHERE id = :id"), {"id": carta_id})
+            
+            conn.execute(text("""INSERT INTO transactions 
+                         (buyer_id, seller_id, carta_id, amount, tipo, created_at)
+                         VALUES (:buyer, :seller, :carta, :amount, 'acquisto', CURRENT_TIMESTAMP)"""),
+                         {"buyer": buyer_id, "seller": seller_id, "carta": carta_id, "amount": amount})
+            
+            conn.commit()
+            return True
+        return False
+    except:
+        conn.rollback()
+        return False
+    finally:
         conn.close()
-        return True
-    
-    conn.close()
-    return False
 
 # ==================== STATE ====================
 if "logged_in" not in st.session_state:
@@ -396,7 +417,7 @@ if "logged_in" not in st.session_state:
     st.session_state.carrello = []
     st.session_state.processing = False
 
-# ==================== POKEMON LATERALI ====================
+# ==================== POKEMON ====================
 st.markdown("""
 <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/25.png" class="pokemon-side poke-left">
 <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/6.png" class="pokemon-side poke-right">
@@ -487,20 +508,22 @@ if not st.session_state.logged_in:
                 elif pw != pw2:
                     st.error("❌ Password diverse")
                 else:
+                    conn = get_conn()
                     try:
-                        conn = get_conn()
                         conn.execute(text("""
                             INSERT INTO users (email, username, password, wallet_balance, created_at)
                             VALUES (:e, :u, :p, 50.0, CURRENT_TIMESTAMP)
                         """), {"e": email, "u": username, "p": hashlib.sha256(pw.encode()).hexdigest()})
                         conn.commit()
-                        conn.close()
                         st.success("✅ Account creato! Hai €50 di bonus!")
                         time.sleep(2)
                         st.session_state.menu = "Login"
                         st.rerun()
                     except:
+                        conn.rollback()
                         st.error("❌ Email/username già in uso")
+                    finally:
+                        conn.close()
 
     else:
         st.markdown("""
@@ -516,22 +539,24 @@ if not st.session_state.logged_in:
             
             if st.form_submit_button("🔓 ACCEDI", use_container_width=True):
                 conn = get_conn()
-                row = conn.execute(text("""
-                    SELECT * FROM users WHERE (email = :u OR username = :u) AND password = :p
-                """), {"u": uid, "p": hashlib.sha256(pwd.encode()).hexdigest()}).fetchone()
-                conn.close()
-                
-                if row:
-                    user = dict(row._mapping)
-                    user['created_at'] = safe_date(user['created_at'])
-                    st.session_state.logged_in = True
-                    st.session_state.user = user
-                    st.session_state.menu = "Market"
-                    st.success(f"✅ Benvenuto @{user['username']}!")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("❌ Credenziali errate")
+                try:
+                    row = conn.execute(text("""
+                        SELECT * FROM users WHERE (email = :u OR username = :u) AND password = :p
+                    """), {"u": uid, "p": hashlib.sha256(pwd.encode()).hexdigest()}).fetchone()
+                    
+                    if row:
+                        user = dict(row._mapping)
+                        user['created_at'] = safe_date(user['created_at'])
+                        st.session_state.logged_in = True
+                        st.session_state.user = user
+                        st.session_state.menu = "Market"
+                        st.success(f"✅ Benvenuto @{user['username']}!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Credenziali errate")
+                finally:
+                    conn.close()
 
 else:
     if st.session_state.menu == "Market":
@@ -618,8 +643,8 @@ else:
                 if not img or not nome:
                     st.error("❌ Foto e nome obbligatori")
                 else:
+                    conn = get_conn()
                     try:
-                        conn = get_conn()
                         conn.execute(text("""
                             INSERT INTO carte (user_id, nome, rarita, prezzo, descrizione, immagine, created_at)
                             VALUES (:u, :n, :r, :p, :d, :img, CURRENT_TIMESTAMP)
@@ -632,12 +657,14 @@ else:
                             "img": img.read()
                         })
                         conn.commit()
-                        conn.close()
                         st.success("🎉 Pubblicata!")
                         time.sleep(1.5)
                         st.rerun()
                     except Exception as e:
+                        conn.rollback()
                         st.error(f"❌ {e}")
+                    finally:
+                        conn.close()
 
     elif st.session_state.menu == "Carrello":
         st.markdown("""
@@ -713,28 +740,28 @@ else:
         
         with col1:
             st.markdown("### ➕ Ricarica")
-            st.info("💡 In produzione: integrazione Stripe/PayPal")
+            st.info("💡 Demo - In produzione: Stripe/PayPal")
             amount = st.number_input("Importo €", 10.0, 1000.0, 50.0, 10.0, key="ricarica")
-            if st.button("💳 RICARICA (Demo)", use_container_width=True):
+            if st.button("💳 RICARICA", use_container_width=True):
                 add_funds(st.session_state.user['id'], amount)
-                st.success(f"✅ Ricaricati €{amount:.2f}!")
+                st.success(f"✅ +€{amount:.2f}!")
                 time.sleep(1)
                 st.rerun()
         
         with col2:
             st.markdown("### ➖ Preleva")
-            st.info("💡 In produzione: bonifico su conto")
+            st.info("💡 Demo - In produzione: Bonifico")
             withdraw_amount = st.number_input("Importo €", 10.0, balance if balance > 0 else 100.0, min(50.0, balance) if balance > 0 else 50.0, 10.0, key="preleva")
-            if st.button("🏦 PRELEVA (Demo)", use_container_width=True):
+            if st.button("🏦 PRELEVA", use_container_width=True):
                 if withdraw_funds(st.session_state.user['id'], withdraw_amount):
-                    st.success(f"✅ Prelevati €{withdraw_amount:.2f}!")
+                    st.success(f"✅ -€{withdraw_amount:.2f}!")
                     time.sleep(1)
                     st.rerun()
                 else:
                     st.error("❌ Saldo insufficiente")
         
         st.divider()
-        st.markdown("### 📊 Transazioni Recenti")
+        st.markdown("### 📊 Transazioni")
         conn = get_conn()
         txs = to_dict_list(conn.execute(text("""
             SELECT * FROM transactions 
