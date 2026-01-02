@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ==================== CSS OTTIMIZZATO ====================
+# ==================== CSS ====================
 def load_css():
     st.markdown("""
     <style>
@@ -46,17 +46,12 @@ def load_css():
         50% { transform: translateY(-15px); } 
     }
 
-    * {
-        box-sizing: border-box;
-    }
-
     .stApp {
         background: var(--dark-bg);
         color: var(--text-dark);
         font-family: 'Poppins', sans-serif;
     }
 
-    /* POKEMON LATERALI */
     .pokemon-side {
         position: fixed;
         pointer-events: none;
@@ -64,19 +59,9 @@ def load_css():
         opacity: 0.2;
         animation: float 4s ease-in-out infinite;
     }
-    .poke-left { 
-        top: 15%; 
-        left: 1%; 
-        width: 70px; 
-    }
-    .poke-right { 
-        top: 60%; 
-        right: 1%; 
-        width: 90px; 
-        animation-delay: 1.5s; 
-    }
+    .poke-left { top: 15%; left: 1%; width: 70px; }
+    .poke-right { top: 60%; right: 1%; width: 90px; animation-delay: 1.5s; }
 
-    /* HEADER */
     .portal-header {
         text-align: center;
         padding: 1.5rem;
@@ -93,7 +78,6 @@ def load_css():
         letter-spacing: 2px;
     }
 
-    /* NAVBAR */
     .nav-bar {
         background: var(--dark-card);
         border: 2px solid var(--cyber-purple);
@@ -104,7 +88,6 @@ def load_css():
         box-shadow: 0 8px 32px rgba(131, 56, 236, 0.2);
     }
 
-    /* CARDS */
     .card-item {
         background: var(--dark-card);
         border: 2px solid var(--cyber-purple);
@@ -125,7 +108,6 @@ def load_css():
         height: auto;
     }
 
-    /* PRICE TAG */
     .price-display {
         font-size: 1.8rem;
         font-weight: 900;
@@ -135,7 +117,6 @@ def load_css():
         margin: 0.5rem 0;
     }
 
-    /* WALLET BOX */
     .wallet-box {
         background: linear-gradient(135deg, var(--cyber-purple), var(--cyber-blue));
         padding: 1.5rem;
@@ -151,7 +132,6 @@ def load_css():
         margin: 0.5rem 0;
     }
 
-    /* BADGES */
     .badge-rarity {
         display: inline-block;
         padding: 0.4rem 0.8rem;
@@ -166,7 +146,6 @@ def load_css():
     .badge-secret { background: linear-gradient(135deg, #ffd700, #ff8c00); color: #000; }
     .badge-rara { background: linear-gradient(135deg, #89f7fe, #66a6ff); color: white; }
 
-    /* PAGE HEADER */
     .section-header {
         text-align: center;
         padding: 2rem;
@@ -185,7 +164,6 @@ def load_css():
         margin: 0;
     }
 
-    /* BUTTONS */
     .stButton > button {
         background: linear-gradient(135deg, var(--cyber-pink), var(--cyber-purple)) !important;
         color: white !important;
@@ -201,7 +179,6 @@ def load_css():
         box-shadow: 0 8px 24px rgba(255, 0, 110, 0.5) !important;
     }
 
-    /* INPUTS */
     .stTextInput input, .stNumberInput input, .stSelectbox select, .stTextArea textarea {
         background: var(--dark-card) !important;
         border: 2px solid var(--cyber-purple) !important;
@@ -214,7 +191,6 @@ def load_css():
         box-shadow: 0 0 15px rgba(255, 0, 110, 0.3) !important;
     }
 
-    /* RESPONSIVE */
     @media (max-width: 768px) {
         .portal-title { font-size: 1.8rem; }
         .section-header h1 { font-size: 1.8rem; }
@@ -222,7 +198,6 @@ def load_css():
         .wallet-amount { font-size: 2rem; }
     }
 
-    /* HIDE STREAMLIT */
     [data-testid="stHeader"], footer, header, .viewerBadge_container__r5tak { 
         display: none !important;
     }
@@ -278,21 +253,30 @@ def get_rarity_class(rarita):
     }
     return mapping.get(rarita, "badge-rara")
 
-# ==================== INIT DB CON WALLET ====================
+# ==================== INIT DB CON MIGRAZIONE ====================
 def init_db():
     conn = get_conn()
     try:
-        # Users con WALLET
+        # Users base
         conn.execute(text('''
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             email TEXT UNIQUE NOT NULL,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
-            wallet_balance REAL DEFAULT 0.0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )'''))
+        conn.commit()
         
+        # MIGRAZIONE: Aggiungi wallet_balance se non esiste
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN wallet_balance REAL DEFAULT 0.0"))
+            conn.commit()
+            st.info("✅ Colonna wallet_balance aggiunta!")
+        except:
+            pass  # Colonna già esistente
+        
+        # Carte
         conn.execute(text('''
         CREATE TABLE IF NOT EXISTS carte (
             id SERIAL PRIMARY KEY,
@@ -306,7 +290,7 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )'''))
         
-        # TRANSAZIONI WALLET
+        # Transazioni
         conn.execute(text('''
         CREATE TABLE IF NOT EXISTS transactions (
             id SERIAL PRIMARY KEY,
@@ -320,13 +304,20 @@ def init_db():
         
         conn.commit()
 
-        if not conn.execute(text("SELECT * FROM users WHERE email = 'admin@pokemon.com'")).fetchone():
+        # Admin con wallet
+        result = conn.execute(text("SELECT * FROM users WHERE email = 'admin@pokemon.com'"))
+        if not result.fetchone():
             pw = hashlib.sha256("admin123".encode()).hexdigest()
             conn.execute(text("""
                 INSERT INTO users (email, username, password, wallet_balance, created_at)
                 VALUES ('admin@pokemon.com', 'admin', :pw, 1000.0, CURRENT_TIMESTAMP)
             """), {"pw": pw})
             conn.commit()
+        else:
+            # Assicurati che admin abbia wallet
+            conn.execute(text("UPDATE users SET wallet_balance = 1000.0 WHERE email = 'admin@pokemon.com' AND wallet_balance IS NULL"))
+            conn.commit()
+            
     except Exception as e:
         st.error(f"Errore DB: {e}")
     finally:
@@ -340,11 +331,11 @@ def get_wallet_balance(user_id):
     result = conn.execute(text("SELECT wallet_balance FROM users WHERE id = :id"), {"id": user_id})
     balance = result.fetchone()
     conn.close()
-    return balance[0] if balance else 0.0
+    return float(balance[0]) if balance and balance[0] is not None else 0.0
 
 def add_funds(user_id, amount):
     conn = get_conn()
-    conn.execute(text("UPDATE users SET wallet_balance = wallet_balance + :amount WHERE id = :id"),
+    conn.execute(text("UPDATE users SET wallet_balance = COALESCE(wallet_balance, 0) + :amount WHERE id = :id"),
                  {"amount": amount, "id": user_id})
     conn.execute(text("""INSERT INTO transactions (buyer_id, amount, tipo, created_at) 
                  VALUES (:id, :amount, 'ricarica', CURRENT_TIMESTAMP)"""),
@@ -378,7 +369,7 @@ def process_purchase(buyer_id, seller_id, carta_id, amount):
         
         # Aggiungi a seller (95% - 5% commissione)
         seller_amount = amount * 0.95
-        conn.execute(text("UPDATE users SET wallet_balance = wallet_balance + :amount WHERE id = :seller"),
+        conn.execute(text("UPDATE users SET wallet_balance = COALESCE(wallet_balance, 0) + :amount WHERE id = :seller"),
                      {"amount": seller_amount, "seller": seller_id})
         
         # Marca carta come venduta
@@ -435,7 +426,6 @@ with col3:
 st.markdown('<div class="nav-bar">', unsafe_allow_html=True)
 
 if st.session_state.logged_in:
-    # MOSTRA WALLET
     balance = get_wallet_balance(st.session_state.user['id'])
     st.markdown(f"""
     <div class="wallet-box">
@@ -499,14 +489,13 @@ if not st.session_state.logged_in:
                 else:
                     try:
                         conn = get_conn()
-                        # BONUS 50€ alla registrazione
                         conn.execute(text("""
                             INSERT INTO users (email, username, password, wallet_balance, created_at)
                             VALUES (:e, :u, :p, 50.0, CURRENT_TIMESTAMP)
                         """), {"e": email, "u": username, "p": hashlib.sha256(pw.encode()).hexdigest()})
                         conn.commit()
                         conn.close()
-                        st.success("✅ Account creato! Hai ricevuto €50 di bonus!")
+                        st.success("✅ Account creato! Hai €50 di bonus!")
                         time.sleep(2)
                         st.session_state.menu = "Login"
                         st.rerun()
@@ -680,11 +669,9 @@ else:
             
             if balance < totale:
                 st.error(f"❌ Saldo insufficiente! Ti servono €{totale - balance:.2f}")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("💳 Ricarica Wallet", use_container_width=True):
-                        st.session_state.menu = "Wallet"
-                        st.rerun()
+                if st.button("💳 Ricarica Wallet", use_container_width=True):
+                    st.session_state.menu = "Wallet"
+                    st.rerun()
             else:
                 if st.button("✅ PAGA CON WALLET", use_container_width=True, type="primary"):
                     success_all = True
@@ -726,7 +713,7 @@ else:
         
         with col1:
             st.markdown("### ➕ Ricarica")
-            st.info("💡 In produzione useresti Stripe/PayPal per ricaricare")
+            st.info("💡 In produzione: integrazione Stripe/PayPal")
             amount = st.number_input("Importo €", 10.0, 1000.0, 50.0, 10.0, key="ricarica")
             if st.button("💳 RICARICA (Demo)", use_container_width=True):
                 add_funds(st.session_state.user['id'], amount)
@@ -736,8 +723,8 @@ else:
         
         with col2:
             st.markdown("### ➖ Preleva")
-            st.info("💡 In produzione trasferiresti su conto bancario")
-            withdraw_amount = st.number_input("Importo €", 10.0, balance, 50.0, 10.0, key="preleva")
+            st.info("💡 In produzione: bonifico su conto")
+            withdraw_amount = st.number_input("Importo €", 10.0, balance if balance > 0 else 100.0, min(50.0, balance) if balance > 0 else 50.0, 10.0, key="preleva")
             if st.button("🏦 PRELEVA (Demo)", use_container_width=True):
                 if withdraw_funds(st.session_state.user['id'], withdraw_amount):
                     st.success(f"✅ Prelevati €{withdraw_amount:.2f}!")
